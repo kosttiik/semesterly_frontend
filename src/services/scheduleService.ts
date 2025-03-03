@@ -1,59 +1,115 @@
 import axios from 'axios';
 import { ScheduleItem, Group } from '../types/schedule';
 
-const API_URL = '/api/v1';
+const API_URL = 'http://localhost:8080/api/v1';
 
-// Функция для получения расписания группы по UUID
-export const getGroupSchedule = async (
-  uuid: string
-): Promise<ScheduleItem[]> => {
-  try {
-    const response = await axios.get(`${API_URL}/get-group-schedule/${uuid}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching group schedule:', error);
-    throw error;
+const api = axios.create({
+  baseURL: API_URL,
+});
+
+class ScheduleService {
+  private api: AxiosInstance;
+
+  constructor() {
+    this.api = axios.create({
+      baseURL: API_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    this.setupInterceptors();
   }
-};
 
-// Функция для получения списка всех доступных групп
-export const getAllGroups = async (): Promise<Group[]> => {
-  try {
-    const response = await axios.get(`${API_URL}/get-groups`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching all groups:', error);
-    throw error;
+  private setupInterceptors(): void {
+    this.api.interceptors.request.use(
+      (config) => {
+        // Add any request headers or auth tokens here
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
+
+    this.api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (axios.isAxiosError(error)) {
+          console.error('API Error:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status,
+            url: error.config?.url,
+          });
+        }
+        return Promise.reject(error);
+      }
+    );
   }
-};
 
-// Функция для сохранения расписания (для будущей функциональности)
-export const saveSchedule = async (scheduleData: any): Promise<any> => {
-  try {
-    const response = await axios.post(
-      `${API_URL}/write-schedule`,
+  async getAllGroups(): Promise<Group[]> {
+    try {
+      const { data } = await api.get<Group[]>('/get-groups');
+      // Log the raw response data
+      console.log('Raw API response:', data);
+
+      if (!data) {
+        console.error('No data received from API');
+        return [];
+      }
+
+      // Ensure we have an array
+      const groups = Array.isArray(data) ? data : [];
+      console.log('Processed groups:', groups);
+
+      // Return empty array if no valid groups found
+      if (groups.length === 0) {
+        console.warn('No groups found in response');
+        return [];
+      }
+
+      return groups;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('Axios error:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status,
+          url: error.config?.url,
+        });
+      } else {
+        console.error('Error fetching groups:', error);
+      }
+      throw error;
+    }
+  }
+
+  async getGroupSchedule(uuid: string): Promise<ScheduleItem[]> {
+    try {
+      const response: AxiosResponse<ScheduleItem[]> = await this.api.get(
+        `/get-group-schedule/${uuid}`
+      );
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch schedule:', error);
+      return [];
+    }
+  }
+
+  async saveSchedule(scheduleData: unknown): Promise<unknown> {
+    const response = await this.api.post('/write-schedule', scheduleData);
+    return response.data;
+  }
+
+  async insertGroupSchedule(
+    uuid: string,
+    scheduleData: unknown
+  ): Promise<unknown> {
+    const response = await this.api.post(
+      `/insert-group-schedule/${uuid}`,
       scheduleData
     );
     return response.data;
-  } catch (error) {
-    console.error('Error saving schedule:', error);
-    throw error;
   }
-};
+}
 
-// Функция для добавления расписания группы
-export const insertGroupSchedule = async (
-  uuid: string,
-  scheduleData: any
-): Promise<any> => {
-  try {
-    const response = await axios.post(
-      `${API_URL}/insert-group-schedule/${uuid}`,
-      scheduleData
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Error inserting group schedule:', error);
-    throw error;
-  }
-};
+export const scheduleService = new ScheduleService();

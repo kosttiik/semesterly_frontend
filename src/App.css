@@ -67,3 +67,16 @@ body {
 .ant-select-multiple .ant-select-selection-item {
   border-radius: 10px;
 }
+
+/* Add these styles to prevent layout shifts */
+.schedule-viewer {
+  min-height: 400px;
+}
+
+.ant-spin-nested-loading {
+  min-height: inherit;
+}
+
+.ant-spin-container {
+  min-height: inherit;
+}

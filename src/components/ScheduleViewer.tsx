@@ -21,7 +21,7 @@ import {
   InfoCircleOutlined,
 } from '@ant-design/icons';
 import { ScheduleItem, Group, TimeSlot, DayOfWeek } from '../types/schedule';
-import { getGroupSchedule, getAllGroups } from '../services/scheduleService';
+import { scheduleService } from '../services/scheduleService';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -42,6 +42,8 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   const [loadingGroups, setLoadingGroups] = useState<boolean>(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [searchText, setSearchText] = useState<string>('');
+  const [initialized, setInitialized] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Константы
   const days: DayOfWeek[] = [
@@ -66,12 +68,20 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
   // Получение всех групп
   const fetchGroups = async () => {
+    console.log('Starting fetchGroups');
     setLoadingGroups(true);
+    setError(null);
+
     try {
-      const fetchedGroups = await getAllGroups();
+      const fetchedGroups = await scheduleService.getAllGroups();
+      if (fetchedGroups.length === 0) {
+        setError('Нет доступных групп');
+        return;
+      }
       setGroups(fetchedGroups);
-    } catch (error) {
-      console.error('Error fetching groups:', error);
+      setInitialized(true);
+    } catch (error: any) {
+      setError(error.message || 'Ошибка загрузки групп');
       message.error('Не удалось загрузить список групп');
     } finally {
       setLoadingGroups(false);
@@ -87,20 +97,14 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
     setLoading(true);
     try {
-      // Fetch schedule for all selected groups
       const promises = selectedGroups.map((groupId) =>
-        getGroupSchedule(groupId)
+        scheduleService.getGroupSchedule(groupId)
       );
       const results = await Promise.all(promises);
-
-      // Combine all schedule items and remove duplicates
       const combinedData = results.flat();
-
-      // Удаляем дубликаты (если одинаковые id)
-      const uniqueData = combinedData.filter(
-        (item, index, self) => index === self.findIndex((t) => t.id === item.id)
+      const uniqueData = Array.from(
+        new Map(combinedData.map((item) => [item.id, item])).values()
       );
-
       setScheduleData(uniqueData);
     } catch (error) {
       console.error('Error fetching schedule data:', error);
@@ -112,13 +116,9 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
   // Загрузка групп при инициализации
   useEffect(() => {
+    console.log('Component mounted, fetching groups');
     fetchGroups();
   }, []);
-
-  // Загрузка расписания при изменении выбранных групп
-  useEffect(() => {
-    fetchScheduleData();
-  }, [selectedGroups]);
 
   // Фильтрованные группы для селекта
   const filteredGroups = useMemo(() => {
@@ -272,119 +272,159 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
   return (
     <div className="schedule-viewer">
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <Card>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-              <Title level={4} style={{ margin: 0 }}>
-                Расписание занятий
-              </Title>
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={fetchScheduleData}
-                disabled={selectedGroups.length === 0}
-              >
-                Обновить
-              </Button>
-            </Space>
-
-            <Divider style={{ margin: '12px 0' }} />
-
-            <Space style={{ width: '100%' }} direction="vertical">
-              <Text>Выберите группы для просмотра расписания:</Text>
-              <Space style={{ width: '100%' }}>
-                <Input
-                  placeholder="Поиск группы..."
-                  value={searchText}
-                  onChange={(e) => setSearchText(e.target.value)}
-                  prefix={<SearchOutlined />}
-                  style={{ width: 200 }}
-                  allowClear
-                />
-                <Select
-                  mode="multiple"
-                  style={{ width: 'calc(100% - 220px)' }}
-                  placeholder="Выберите группы"
-                  value={selectedGroups}
-                  onChange={setSelectedGroups}
-                  loading={loadingGroups}
-                  optionFilterProp="label"
-                  maxTagCount="responsive"
+      <Card>
+        {loadingGroups ? (
+          <Spin>
+            <div style={{ padding: 50, textAlign: 'center' }}>
+              <Text>Загрузка групп...</Text>
+            </div>
+          </Spin>
+        ) : error ? (
+          <Empty
+            description={
+              <>
+                <Text type="danger">{error}</Text>
+                <div style={{ marginTop: 8 }}>
+                  <small>Проверьте консоль разработчика для деталей</small>
+                </div>
+                <Button
+                  onClick={fetchGroups}
+                  type="primary"
+                  style={{ marginTop: 16 }}
                 >
-                  {filteredGroups.map((group) => (
-                    <Select.Option
-                      key={group.uuid}
-                      value={group.uuid}
-                      label={group.name}
-                    >
-                      {group.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-                <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
-                  <InfoCircleOutlined />
-                </Tooltip>
-              </Space>
-            </Space>
-          </Space>
-        </Card>
-
-        <Spin spinning={loading}>
-          {selectedGroups.length > 0 ? (
-            <Tabs defaultActiveKey="numerator" type="card">
-              <TabPane tab="Числитель" key="numerator">
-                <div className="table-container">
-                  <Table
-                    columns={generateColumns('ch')}
-                    dataSource={generateDataSource()}
-                    pagination={false}
-                    bordered
-                    size="small"
-                    scroll={{ x: 'max-content' }}
-                    className="schedule-table"
-                    rowClassName={(record) => {
-                      // Выделяем текущее время, если применимо
-                      return currentDayIndex > 0 &&
-                        currentDayIndex < 7 &&
-                        record.slot === currentTimeIndex + 1
-                        ? 'current-time-row'
-                        : '';
-                    }}
-                  />
-                </div>
-              </TabPane>
-              <TabPane tab="Знаменатель" key="denominator">
-                <div className="table-container">
-                  <Table
-                    columns={generateColumns('zn')}
-                    dataSource={generateDataSource()}
-                    pagination={false}
-                    bordered
-                    size="small"
-                    scroll={{ x: 'max-content' }}
-                    className="schedule-table"
-                    rowClassName={(record) => {
-                      // Выделяем текущее время, если применимо
-                      return currentDayIndex > 0 &&
-                        currentDayIndex < 7 &&
-                        record.slot === currentTimeIndex + 1
-                        ? 'current-time-row'
-                        : '';
-                    }}
-                  />
-                </div>
-              </TabPane>
-            </Tabs>
-          ) : (
+                  Повторить попытку
+                </Button>
+              </>
+            }
+          />
+        ) : !initialized ? (
+          <Spin>
+            <div style={{ padding: 50, textAlign: 'center' }}>
+              <Text>Загрузка групп...</Text>
+            </div>
+          </Spin>
+        ) : (
+          <Space
+            direction="vertical"
+            size="large"
+            style={{ width: '100%', display: 'flex' }}
+          >
             <Card>
-              <Empty
-                description="Выберите группы для отображения расписания"
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-              />
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Space
+                  style={{ width: '100%', justifyContent: 'space-between' }}
+                >
+                  <Title level={4} style={{ margin: 0 }}>
+                    Расписание занятий
+                  </Title>
+                  <Button
+                    icon={<ReloadOutlined />}
+                    onClick={fetchScheduleData}
+                    disabled={selectedGroups.length === 0}
+                  >
+                    Обновить
+                  </Button>
+                </Space>
+
+                <Divider style={{ margin: '12px 0' }} />
+
+                <Space style={{ width: '100%' }} direction="vertical">
+                  <Text>Выберите группы для просмотра расписания:</Text>
+                  <Space style={{ width: '100%' }}>
+                    <Input
+                      placeholder="Поиск группы..."
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      prefix={<SearchOutlined />}
+                      style={{ width: 200 }}
+                      allowClear
+                    />
+                    <Select
+                      mode="multiple"
+                      style={{ width: 'calc(100% - 220px)' }}
+                      placeholder="Выберите группы"
+                      value={selectedGroups}
+                      onChange={setSelectedGroups}
+                      loading={loadingGroups}
+                      optionFilterProp="label"
+                      maxTagCount="responsive"
+                    >
+                      {filteredGroups.map((group) => (
+                        <Select.Option
+                          key={group.uuid}
+                          value={group.uuid}
+                          label={group.name}
+                        >
+                          {group.name}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                    <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
+                      <InfoCircleOutlined />
+                    </Tooltip>
+                  </Space>
+                </Space>
+              </Space>
             </Card>
-          )}
-        </Spin>
-      </Space>
+
+            <Spin spinning={loading}>
+              {selectedGroups.length > 0 ? (
+                <Tabs defaultActiveKey="numerator" type="card">
+                  <TabPane tab="Числитель" key="numerator">
+                    <div className="table-container">
+                      <Table
+                        columns={generateColumns('ch')}
+                        dataSource={generateDataSource()}
+                        pagination={false}
+                        bordered
+                        size="small"
+                        scroll={{ x: 'max-content' }}
+                        className="schedule-table"
+                        rowClassName={(record) => {
+                          // Выделяем текущее время, если применимо
+                          return currentDayIndex > 0 &&
+                            currentDayIndex < 7 &&
+                            record.slot === currentTimeIndex + 1
+                            ? 'current-time-row'
+                            : '';
+                        }}
+                      />
+                    </div>
+                  </TabPane>
+                  <TabPane tab="Знаменатель" key="denominator">
+                    <div className="table-container">
+                      <Table
+                        columns={generateColumns('zn')}
+                        dataSource={generateDataSource()}
+                        pagination={false}
+                        bordered
+                        size="small"
+                        scroll={{ x: 'max-content' }}
+                        className="schedule-table"
+                        rowClassName={(record) => {
+                          // Выделяем текущее время, если применимо
+                          return currentDayIndex > 0 &&
+                            currentDayIndex < 7 &&
+                            record.slot === currentTimeIndex + 1
+                            ? 'current-time-row'
+                            : '';
+                        }}
+                      />
+                    </div>
+                  </TabPane>
+                </Tabs>
+              ) : (
+                <Card>
+                  <Empty
+                    description="Выберите группы для отображения расписания"
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                </Card>
+              )}
+            </Spin>
+          </Space>
+        )}
+      </Card>
     </div>
   );
 };
