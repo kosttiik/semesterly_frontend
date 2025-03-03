@@ -70,7 +70,7 @@ const App: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', height: '100%' }}
             >
               <Title level={3} style={{ margin: '0', color: '#1677ff' }}>
-                Расписание занятий
+                Semesterly
               </Title>
             </div>
           </Header>
@@ -79,7 +79,7 @@ const App: React.FC = () => {
             <ScheduleViewer />
           </Content>
           <Footer style={{ textAlign: 'center', backgroundColor: '#fff' }}>
-            Schedule Viewer ©{new Date().getFullYear()}
+            Semesterly © Konstantin Samoylov, {new Date().getFullYear()}
           </Footer>
         </Layout>
       </ErrorBoundary>

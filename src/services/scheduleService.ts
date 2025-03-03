@@ -1,11 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { ScheduleItem, Group } from '../types/schedule';
 
 const API_URL = 'http://localhost:8080/api/v1';
-
-const api = axios.create({
-  baseURL: API_URL,
-});
 
 class ScheduleService {
   private api: AxiosInstance;
@@ -48,7 +44,7 @@ class ScheduleService {
 
   async getAllGroups(): Promise<Group[]> {
     try {
-      const { data } = await api.get<Group[]>('/get-groups');
+      const { data } = await this.api.get<Group[]>('/get-groups');
       // Log the raw response data
       console.log('Raw API response:', data);
 

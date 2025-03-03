@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Table,
   Tabs,
@@ -23,9 +23,9 @@ import {
 import { ScheduleItem, Group, TimeSlot, DayOfWeek } from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import dayjs from 'dayjs';
+import debounce from 'lodash/debounce';
 
 const { Title, Text } = Typography;
-const { TabPane } = Tabs;
 
 interface ScheduleViewerProps {
   initialGroupIds?: string[];
@@ -44,6 +44,82 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   const [searchText, setSearchText] = useState<string>('');
   const [initialized, setInitialized] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Optimize search with debounce
+  const [searchValue, setSearchValue] = useState<string>('');
+  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
+  const [displayedGroups, setDisplayedGroups] = useState<Group[]>([]);
+  const pageSize = 50; // Number of items to load at once
+
+  // Memoized option renderer - move this before filteredGroups
+  const renderOption = useCallback(
+    (group: Group) => ({
+      label: group.name,
+      value: group.uuid,
+    }),
+    []
+  );
+
+  // Filtered groups using renderOption
+  const filteredGroups = useMemo(() => {
+    if (!dropdownOpen) return [];
+    if (!searchText) return groups.slice(0, pageSize);
+    return groups.filter((group) =>
+      group.name.toLowerCase().includes(searchText.toLowerCase())
+    );
+  }, [groups, searchText, dropdownOpen, pageSize]);
+
+  // Select options using renderOption
+  const selectOptions = useMemo(() => {
+    return searchText
+      ? filteredGroups.map(renderOption)
+      : displayedGroups.map(renderOption);
+  }, [filteredGroups, displayedGroups, renderOption, searchText]);
+
+  // Handle dropdown visibility
+  const handleDropdownVisibleChange = (open: boolean) => {
+    setDropdownOpen(open);
+    if (open) {
+      setDisplayedGroups(groups.slice(0, pageSize));
+    }
+  };
+
+  // Handle scroll in dropdown
+  const handlePopupScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const { currentTarget } = e;
+      if (
+        currentTarget.scrollTop + currentTarget.clientHeight >=
+        currentTarget.scrollHeight - 50
+      ) {
+        const currentLength = displayedGroups.length;
+        const newGroups = groups.slice(0, currentLength + pageSize);
+        setDisplayedGroups(newGroups);
+      }
+    },
+    [displayedGroups, groups]
+  );
+
+  // Debounced search handler
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setSearchText(value);
+    }, 300),
+    []
+  );
+
+  // Handle search change with debounce
+  const handleSearch = (value: string) => {
+    setSearchValue(value);
+    debouncedSearch(value);
+  };
+
+  // Clean up debounce on unmount
+  useEffect(() => {
+    return () => {
+      debouncedSearch.cancel();
+    };
+  }, [debouncedSearch]);
 
   // Константы
   const days: DayOfWeek[] = [
@@ -80,8 +156,12 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       }
       setGroups(fetchedGroups);
       setInitialized(true);
-    } catch (error: any) {
-      setError(error.message || 'Ошибка загрузки групп');
+    } catch (error) {
+      if (error instanceof Error) {
+        setError(error.message || 'Ошибка загрузки групп');
+      } else {
+        setError('Неизвестная ошибка при загрузке групп');
+      }
       message.error('Не удалось загрузить список групп');
     } finally {
       setLoadingGroups(false);
@@ -120,13 +200,12 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     fetchGroups();
   }, []);
 
-  // Фильтрованные группы для селекта
-  const filteredGroups = useMemo(() => {
-    if (!searchText) return groups;
-    return groups.filter((group) =>
-      group.name.toLowerCase().includes(searchText.toLowerCase())
-    );
-  }, [groups, searchText]);
+  // Add useEffect to fetch schedule when groups change
+  useEffect(() => {
+    if (initialized && selectedGroups.length > 0) {
+      fetchScheduleData();
+    }
+  }, [selectedGroups, initialized]);
 
   // Определение клеток для отображения по типу недели
   const getClassesByWeekType = (
@@ -232,7 +311,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         title: day.name,
         dataIndex: `day${day.id}`,
         key: `day${day.id}`,
-        render: (_: any, record: any) =>
+        render: (_: unknown, record: { slot: number }) =>
           renderClassInfo(getClassesByWeekType(day.id, record.slot, weekType)),
       })),
     ];
@@ -346,19 +425,18 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                       value={selectedGroups}
                       onChange={setSelectedGroups}
                       loading={loadingGroups}
-                      optionFilterProp="label"
+                      searchValue={searchValue}
+                      onSearch={handleSearch}
+                      options={selectOptions}
+                      filterOption={false} // Disable client-side filtering
+                      popupMatchSelectWidth={false}
+                      listHeight={300}
+                      dropdownStyle={{ minWidth: '300px' }}
+                      virtual={true} // Enable virtual scrolling
                       maxTagCount="responsive"
-                    >
-                      {filteredGroups.map((group) => (
-                        <Select.Option
-                          key={group.uuid}
-                          value={group.uuid}
-                          label={group.name}
-                        >
-                          {group.name}
-                        </Select.Option>
-                      ))}
-                    </Select>
+                      onDropdownVisibleChange={handleDropdownVisibleChange}
+                      onPopupScroll={handlePopupScroll}
+                    />
                     <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
                       <InfoCircleOutlined />
                     </Tooltip>
@@ -369,50 +447,60 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
             <Spin spinning={loading}>
               {selectedGroups.length > 0 ? (
-                <Tabs defaultActiveKey="numerator" type="card">
-                  <TabPane tab="Числитель" key="numerator">
-                    <div className="table-container">
-                      <Table
-                        columns={generateColumns('ch')}
-                        dataSource={generateDataSource()}
-                        pagination={false}
-                        bordered
-                        size="small"
-                        scroll={{ x: 'max-content' }}
-                        className="schedule-table"
-                        rowClassName={(record) => {
-                          // Выделяем текущее время, если применимо
-                          return currentDayIndex > 0 &&
-                            currentDayIndex < 7 &&
-                            record.slot === currentTimeIndex + 1
-                            ? 'current-time-row'
-                            : '';
-                        }}
-                      />
-                    </div>
-                  </TabPane>
-                  <TabPane tab="Знаменатель" key="denominator">
-                    <div className="table-container">
-                      <Table
-                        columns={generateColumns('zn')}
-                        dataSource={generateDataSource()}
-                        pagination={false}
-                        bordered
-                        size="small"
-                        scroll={{ x: 'max-content' }}
-                        className="schedule-table"
-                        rowClassName={(record) => {
-                          // Выделяем текущее время, если применимо
-                          return currentDayIndex > 0 &&
-                            currentDayIndex < 7 &&
-                            record.slot === currentTimeIndex + 1
-                            ? 'current-time-row'
-                            : '';
-                        }}
-                      />
-                    </div>
-                  </TabPane>
-                </Tabs>
+                <Tabs
+                  defaultActiveKey="numerator"
+                  type="card"
+                  items={[
+                    {
+                      key: 'numerator',
+                      label: 'Числитель',
+                      children: (
+                        <div className="table-container">
+                          <Table
+                            columns={generateColumns('ch')}
+                            dataSource={generateDataSource()}
+                            pagination={false}
+                            bordered
+                            size="small"
+                            scroll={{ x: 'max-content' }}
+                            className="schedule-table"
+                            rowClassName={(record) => {
+                              return currentDayIndex > 0 &&
+                                currentDayIndex < 7 &&
+                                record.slot === currentTimeIndex + 1
+                                ? 'current-time-row'
+                                : '';
+                            }}
+                          />
+                        </div>
+                      ),
+                    },
+                    {
+                      key: 'denominator',
+                      label: 'Знаменатель',
+                      children: (
+                        <div className="table-container">
+                          <Table
+                            columns={generateColumns('zn')}
+                            dataSource={generateDataSource()}
+                            pagination={false}
+                            bordered
+                            size="small"
+                            scroll={{ x: 'max-content' }}
+                            className="schedule-table"
+                            rowClassName={(record) => {
+                              return currentDayIndex > 0 &&
+                                currentDayIndex < 7 &&
+                                record.slot === currentTimeIndex + 1
+                                ? 'current-time-row'
+                                : '';
+                            }}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
               ) : (
                 <Card>
                   <Empty
