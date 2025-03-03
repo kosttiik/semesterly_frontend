@@ -1,11 +1,69 @@
-.class-card {
-  transition: all 0.3s;
+/* Global styles */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
-.class-card:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-}
-
-.ant-table-cell {
+/* Schedule viewer styles */
+.schedule-viewer .ant-table-cell {
   vertical-align: top;
+  padding: 8px;
+}
+
+.schedule-viewer .ant-table-thead > tr > th {
+  background-color: #f0f5ff;
+  font-weight: 600;
+}
+
+.schedule-viewer .table-container {
+  overflow-x: auto;
+  background: white;
+  border-radius: 4px;
+}
+
+.schedule-viewer .class-card {
+  transition: all 0.3s;
+  margin-bottom: 8px;
+  border-radius: 4px;
+}
+
+.schedule-viewer .class-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Current time highlighting */
+.schedule-table .current-time-row {
+  background-color: rgba(24, 144, 255, 0.05);
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+  .schedule-viewer .ant-space {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .schedule-viewer .ant-table-cell {
+    padding: 4px;
+  }
+}
+
+/* Tab styles */
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab {
+  border-radius: 4px 4px 0 0;
+  background-color: #f5f5f5;
+  border-color: #e8e8e8;
+}
+
+.ant-tabs-card > .ant-tabs-nav .ant-tabs-tab-active {
+  background-color: #fff;
+  border-bottom-color: #fff;
+}
+
+/* Selection styles */
+.ant-select-multiple .ant-select-selection-item {
+  border-radius: 10px;
 }

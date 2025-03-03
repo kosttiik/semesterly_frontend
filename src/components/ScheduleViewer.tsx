@@ -1,11 +1,31 @@
-import React, { useState, useEffect } from 'react';
-import { Table, Tabs, Select, Card, Tag, Typography, Space, Spin } from 'antd';
-import { ScheduleItem } from '../types/schedule';
-import { getGroupSchedule } from '../services/scheduleService';
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Table,
+  Tabs,
+  Select,
+  Card,
+  Tag,
+  Typography,
+  Space,
+  Spin,
+  Input,
+  Button,
+  Empty,
+  message,
+  Tooltip,
+  Divider,
+} from 'antd';
+import {
+  SearchOutlined,
+  ReloadOutlined,
+  InfoCircleOutlined,
+} from '@ant-design/icons';
+import { ScheduleItem, Group, TimeSlot, DayOfWeek } from '../types/schedule';
+import { getGroupSchedule, getAllGroups } from '../services/scheduleService';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { TabPane } = Tabs;
-const { Option } = Select;
 
 interface ScheduleViewerProps {
   initialGroupIds?: string[];
@@ -14,23 +34,27 @@ interface ScheduleViewerProps {
 const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   initialGroupIds = [],
 }) => {
+  // Состояния
   const [selectedGroups, setSelectedGroups] =
     useState<string[]>(initialGroupIds);
   const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [loadingGroups, setLoadingGroups] = useState<boolean>(false);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [searchText, setSearchText] = useState<string>('');
 
-  // Days of the week in Russian
-  const days = [
-    'Понедельник',
-    'Вторник',
-    'Среда',
-    'Четверг',
-    'Пятница',
-    'Суббота',
+  // Константы
+  const days: DayOfWeek[] = [
+    { id: 1, name: 'Понедельник' },
+    { id: 2, name: 'Вторник' },
+    { id: 3, name: 'Среда' },
+    { id: 4, name: 'Четверг' },
+    { id: 5, name: 'Пятница' },
+    { id: 6, name: 'Суббота' },
   ];
 
-  // Time slots
-  const timeSlots = [
+  // Временные слоты
+  const timeSlots: TimeSlot[] = [
     { slot: 1, time: '08:30-10:00' },
     { slot: 2, time: '10:10-11:40' },
     { slot: 3, time: '11:50-13:20' },
@@ -40,8 +64,26 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     { slot: 7, time: '19:10-20:40' },
   ];
 
+  // Получение всех групп
+  const fetchGroups = async () => {
+    setLoadingGroups(true);
+    try {
+      const fetchedGroups = await getAllGroups();
+      setGroups(fetchedGroups);
+    } catch (error) {
+      console.error('Error fetching groups:', error);
+      message.error('Не удалось загрузить список групп');
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  // Получение данных расписания
   const fetchScheduleData = async () => {
-    if (selectedGroups.length === 0) return;
+    if (selectedGroups.length === 0) {
+      setScheduleData([]);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -51,21 +93,42 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       );
       const results = await Promise.all(promises);
 
-      // Combine all schedule items
+      // Combine all schedule items and remove duplicates
       const combinedData = results.flat();
-      setScheduleData(combinedData);
+
+      // Удаляем дубликаты (если одинаковые id)
+      const uniqueData = combinedData.filter(
+        (item, index, self) => index === self.findIndex((t) => t.id === item.id)
+      );
+
+      setScheduleData(uniqueData);
     } catch (error) {
       console.error('Error fetching schedule data:', error);
+      message.error('Не удалось загрузить расписание');
     } finally {
       setLoading(false);
     }
   };
 
+  // Загрузка групп при инициализации
+  useEffect(() => {
+    fetchGroups();
+  }, []);
+
+  // Загрузка расписания при изменении выбранных групп
   useEffect(() => {
     fetchScheduleData();
   }, [selectedGroups]);
 
-  // Filter classes by week type ("ch" for numerator, "zn" for denominator, "all" for both)
+  // Фильтрованные группы для селекта
+  const filteredGroups = useMemo(() => {
+    if (!searchText) return groups;
+    return groups.filter((group) =>
+      group.name.toLowerCase().includes(searchText.toLowerCase())
+    );
+  }, [groups, searchText]);
+
+  // Определение клеток для отображения по типу недели
   const getClassesByWeekType = (
     day: number,
     timeSlot: number,
@@ -79,7 +142,26 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     );
   };
 
-  // Render class information
+  // Получение цвета для типа занятия
+  const getActivityTypeColor = (actType: string): string => {
+    const typeColors: Record<string, string> = {
+      lecture: 'blue',
+      лекция: 'blue',
+      практика: 'green',
+      practice: 'green',
+      лабораторная: 'purple',
+      laboratory: 'purple',
+      семинар: 'orange',
+      seminar: 'orange',
+      зачет: 'gold',
+      credit: 'gold',
+      экзамен: 'red',
+      exam: 'red',
+    };
+    return typeColors[actType.toLowerCase()] || 'default';
+  };
+
+  // Отображение информации о занятии
   const renderClassInfo = (classes: ScheduleItem[]) => {
     if (classes.length === 0) return null;
 
@@ -88,13 +170,25 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         key={cls.id}
         size="small"
         className="class-card"
-        style={{ marginBottom: 8 }}
+        style={{
+          marginBottom: 8,
+          borderLeft: `3px solid ${
+            getActivityTypeColor(cls.disciplines[0]?.actType) === 'default'
+              ? '#d9d9d9'
+              : `var(--ant-${getActivityTypeColor(
+                  cls.disciplines[0]?.actType
+                )}-5)`
+          }`,
+        }}
       >
         <div>
           <Text strong>
             {cls.disciplines[0]?.fullName || cls.disciplines[0]?.abbr}
           </Text>
-          <Tag color="blue" style={{ marginLeft: 8 }}>
+          <Tag
+            color={getActivityTypeColor(cls.disciplines[0]?.actType)}
+            style={{ marginLeft: 8 }}
+          >
             {cls.disciplines[0]?.actType}
           </Tag>
         </div>
@@ -112,14 +206,19 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         </div>
         <div>
           <Text type="secondary" style={{ fontSize: '11px' }}>
-            {cls.groups.map((g) => g.name).join(', ')}
+            {cls.stream || cls.groups.map((g) => g.name).join(', ')}
+          </Text>
+        </div>
+        <div>
+          <Text type="secondary" style={{ fontSize: '11px' }}>
+            {cls.startTime} - {cls.endTime}
           </Text>
         </div>
       </Card>
     ));
   };
 
-  // Generate columns for schedule table
+  // Генерация столбцов для таблицы расписания
   const generateColumns = (weekType: 'ch' | 'zn') => {
     return [
       {
@@ -127,20 +226,19 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         dataIndex: 'time',
         key: 'time',
         width: 100,
+        fixed: 'left' as const,
       },
-      ...days.map((day, index) => ({
-        title: day,
-        dataIndex: `day${index + 1}`,
-        key: `day${index + 1}`,
+      ...days.map((day) => ({
+        title: day.name,
+        dataIndex: `day${day.id}`,
+        key: `day${day.id}`,
         render: (_: any, record: any) =>
-          renderClassInfo(
-            getClassesByWeekType(index + 1, record.slot, weekType)
-          ),
+          renderClassInfo(getClassesByWeekType(day.id, record.slot, weekType)),
       })),
     ];
   };
 
-  // Generate data source for the table
+  // Генерация источника данных для таблицы
   const generateDataSource = () => {
     return timeSlots.map((slot) => ({
       key: slot.slot,
@@ -149,55 +247,142 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     }));
   };
 
+  // Определение текущего дня и времени для выделения
+  const currentDayIndex = dayjs().day();
+  const currentTimeIndex = timeSlots.findIndex((slot) => {
+    const [startHour, startMinute] = slot.time
+      .split('-')[0]
+      .split(':')
+      .map(Number);
+    const [endHour, endMinute] = slot.time.split('-')[1].split(':').map(Number);
+
+    const now = dayjs();
+    const currentHour = now.hour();
+    const currentMinute = now.minute();
+
+    const currentTimeInMinutes = currentHour * 60 + currentMinute;
+    const startTimeInMinutes = startHour * 60 + startMinute;
+    const endTimeInMinutes = endHour * 60 + endMinute;
+
+    return (
+      currentTimeInMinutes >= startTimeInMinutes &&
+      currentTimeInMinutes <= endTimeInMinutes
+    );
+  });
+
   return (
     <div className="schedule-viewer">
-      <Space direction="vertical" style={{ width: '100%' }}>
+      <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <Card>
-          <Title level={4}>Расписание</Title>
-          <Select
-            mode="multiple"
-            style={{ width: '100%' }}
-            placeholder="Выберите группы"
-            value={selectedGroups}
-            onChange={setSelectedGroups}
-          >
-            {/* Replace this with your actual group data */}
-            <Option value="2022686e-8610-11ea-9007-005056960017">
-              ИУ5Ц-101Б
-            </Option>
-            <Option value="20227214-8610-11ea-925f-005056960017">
-              ИУ5Ц-102Б
-            </Option>
-            <Option value="16093ef2-01f1-11ed-a9b0-d15fad5aaa3d">
-              ИУ5Ц-103Б
-            </Option>
-            <Option value="a55a0f28-01f1-11ed-a9b0-d15fad5aaa3d">
-              ИУ5Ц-104Б
-            </Option>
-          </Select>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+              <Title level={4} style={{ margin: 0 }}>
+                Расписание занятий
+              </Title>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={fetchScheduleData}
+                disabled={selectedGroups.length === 0}
+              >
+                Обновить
+              </Button>
+            </Space>
+
+            <Divider style={{ margin: '12px 0' }} />
+
+            <Space style={{ width: '100%' }} direction="vertical">
+              <Text>Выберите группы для просмотра расписания:</Text>
+              <Space style={{ width: '100%' }}>
+                <Input
+                  placeholder="Поиск группы..."
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  prefix={<SearchOutlined />}
+                  style={{ width: 200 }}
+                  allowClear
+                />
+                <Select
+                  mode="multiple"
+                  style={{ width: 'calc(100% - 220px)' }}
+                  placeholder="Выберите группы"
+                  value={selectedGroups}
+                  onChange={setSelectedGroups}
+                  loading={loadingGroups}
+                  optionFilterProp="label"
+                  maxTagCount="responsive"
+                >
+                  {filteredGroups.map((group) => (
+                    <Select.Option
+                      key={group.uuid}
+                      value={group.uuid}
+                      label={group.name}
+                    >
+                      {group.name}
+                    </Select.Option>
+                  ))}
+                </Select>
+                <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
+                  <InfoCircleOutlined />
+                </Tooltip>
+              </Space>
+            </Space>
+          </Space>
         </Card>
 
         <Spin spinning={loading}>
-          <Tabs defaultActiveKey="numerator">
-            <TabPane tab="Числитель" key="numerator">
-              <Table
-                columns={generateColumns('ch')}
-                dataSource={generateDataSource()}
-                pagination={false}
-                bordered
-                size="small"
+          {selectedGroups.length > 0 ? (
+            <Tabs defaultActiveKey="numerator" type="card">
+              <TabPane tab="Числитель" key="numerator">
+                <div className="table-container">
+                  <Table
+                    columns={generateColumns('ch')}
+                    dataSource={generateDataSource()}
+                    pagination={false}
+                    bordered
+                    size="small"
+                    scroll={{ x: 'max-content' }}
+                    className="schedule-table"
+                    rowClassName={(record) => {
+                      // Выделяем текущее время, если применимо
+                      return currentDayIndex > 0 &&
+                        currentDayIndex < 7 &&
+                        record.slot === currentTimeIndex + 1
+                        ? 'current-time-row'
+                        : '';
+                    }}
+                  />
+                </div>
+              </TabPane>
+              <TabPane tab="Знаменатель" key="denominator">
+                <div className="table-container">
+                  <Table
+                    columns={generateColumns('zn')}
+                    dataSource={generateDataSource()}
+                    pagination={false}
+                    bordered
+                    size="small"
+                    scroll={{ x: 'max-content' }}
+                    className="schedule-table"
+                    rowClassName={(record) => {
+                      // Выделяем текущее время, если применимо
+                      return currentDayIndex > 0 &&
+                        currentDayIndex < 7 &&
+                        record.slot === currentTimeIndex + 1
+                        ? 'current-time-row'
+                        : '';
+                    }}
+                  />
+                </div>
+              </TabPane>
+            </Tabs>
+          ) : (
+            <Card>
+              <Empty
+                description="Выберите группы для отображения расписания"
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
               />
-            </TabPane>
-            <TabPane tab="Знаменатель" key="denominator">
-              <Table
-                columns={generateColumns('zn')}
-                dataSource={generateDataSource()}
-                pagination={false}
-                bordered
-                size="small"
-              />
-            </TabPane>
-          </Tabs>
+            </Card>
+          )}
         </Spin>
       </Space>
     </div>

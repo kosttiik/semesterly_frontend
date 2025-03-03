@@ -1,9 +1,5 @@
-// src/types/schedule.ts
 export interface Teacher {
   id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string;
   uuid: string;
   lastName: string;
   firstName: string;
@@ -12,9 +8,6 @@ export interface Teacher {
 
 export interface Audience {
   id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string;
   name: string;
   uuid: string;
   building: string;
@@ -23,9 +16,6 @@ export interface Audience {
 
 export interface Discipline {
   id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string;
   abbr: string;
   actType: string;
   fullName: string;
@@ -34,9 +24,6 @@ export interface Discipline {
 
 export interface Group {
   id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string;
   name: string;
   uuid: string;
   department_uid: string;
@@ -44,18 +31,31 @@ export interface Group {
 
 export interface ScheduleItem {
   id: number;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string;
   day: number;
   time: number;
-  week: string;
+  week: 'ch' | 'zn' | 'all'; // ch = числитель, zn = знаменатель, all = обе недели
   groups: Group[];
   stream: string;
   endTime: string;
+  startTime: string;
   teachers: Teacher[];
   audiences: Audience[];
-  startTime: string;
   disciplines: Discipline[];
   permission: string;
+}
+
+// Вспомогательные типы для отображения
+export interface TimeSlot {
+  slot: number;
+  time: string;
+}
+
+export interface WeekType {
+  id: string;
+  name: string;
+}
+
+export interface DayOfWeek {
+  id: number;
+  name: string;
 }
