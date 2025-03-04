@@ -3,6 +3,7 @@ import { ScheduleItem, Group } from '../types/schedule';
 
 const API_URL = 'http://localhost:8080/api/v1';
 
+// Сервис для работы с API расписания
 class ScheduleService {
   private api: AxiosInstance;
 
@@ -17,10 +18,11 @@ class ScheduleService {
     this.setupInterceptors();
   }
 
+  // Настраиваем перехватчики запросов для обработки ошибок
   private setupInterceptors(): void {
     this.api.interceptors.request.use(
       (config) => {
-        // Add any request headers or auth tokens here
+        // Добавляем заголовки запроса или токены авторизации
         return config;
       },
       (error) => Promise.reject(error)
@@ -30,7 +32,7 @@ class ScheduleService {
       (response) => response,
       (error) => {
         if (axios.isAxiosError(error)) {
-          console.error('API Error:', {
+          console.error('Ошибка API:', {
             message: error.message,
             response: error.response?.data,
             status: error.response?.status,
@@ -42,24 +44,25 @@ class ScheduleService {
     );
   }
 
+  // Получаем список всех групп
   async getAllGroups(): Promise<Group[]> {
     try {
       const { data } = await this.api.get<Group[]>('/get-groups');
-      // Log the raw response data
-      console.log('Raw API response:', data);
+      // Логируем сырой ответ API
+      console.log('Сырой ответ API:', data);
 
       if (!data) {
-        console.error('No data received from API');
+        console.error('Нет данных от API');
         return [];
       }
 
-      // Ensure we have an array
+      // Проверяем, что получили массив
       const groups = Array.isArray(data) ? data : [];
-      console.log('Processed groups:', groups);
+      console.log('Обработанные группы:', groups);
 
-      // Return empty array if no valid groups found
+      // Возвращаем пустой массив, если нет валидных групп
       if (groups.length === 0) {
-        console.warn('No groups found in response');
+        console.warn('В ответе нет групп');
         return [];
       }
 
@@ -79,6 +82,7 @@ class ScheduleService {
     }
   }
 
+  // Получаем расписание конкретной группы
   async getGroupSchedule(uuid: string): Promise<ScheduleItem[]> {
     try {
       const response: AxiosResponse<ScheduleItem[]> = await this.api.get(

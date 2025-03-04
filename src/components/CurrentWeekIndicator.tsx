@@ -11,11 +11,13 @@ dayjs.extend(weekOfYear);
 dayjs.extend(isoWeek);
 dayjs.locale(locale);
 
+// Компонент показывает текущую неделю (числитель/знаменатель) и дату
 const CurrentWeekIndicator: React.FC = () => {
   const [isNumerator, setIsNumerator] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState<string>('');
   const [currentWeekNumber, setCurrentWeekNumber] = useState<number>(0);
 
+  // Следим за сменой недели и обновляем информацию
   useEffect(() => {
     // Определяем, является ли текущая неделя числителем или знаменателем
     // Правило: нечетные недели - числитель, четные - знаменатель

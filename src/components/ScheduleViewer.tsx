@@ -34,7 +34,7 @@ interface ScheduleViewerProps {
 const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   initialGroupIds = [],
 }) => {
-  // Состояния
+  // Основное хранилище данных компонента
   const [selectedGroups, setSelectedGroups] =
     useState<string[]>(initialGroupIds);
   const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
@@ -45,13 +45,13 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   const [initialized, setInitialized] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Optimize search with debounce
+  // Оптимизация поиска с помощью debounce
   const [searchValue, setSearchValue] = useState<string>('');
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
   const [displayedGroups, setDisplayedGroups] = useState<Group[]>([]);
-  const pageSize = 50; // Number of items to load at once
+  const pageSize = 50; // Количество элементов для загрузки за раз
 
-  // Memoized option renderer - move this before filteredGroups
+  // Мемоизированный рендерер опций
   const renderOption = useCallback(
     (group: Group) => ({
       label: group.name,
@@ -60,7 +60,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     []
   );
 
-  // Filtered groups using renderOption
+  // Отфильтрованные группы с использованием renderOption
   const filteredGroups = useMemo(() => {
     if (!dropdownOpen) return [];
     if (!searchText) return groups.slice(0, pageSize);
@@ -69,14 +69,14 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     );
   }, [groups, searchText, dropdownOpen, pageSize]);
 
-  // Select options using renderOption
+  // Опции выбора с использованием renderOption
   const selectOptions = useMemo(() => {
     return searchText
       ? filteredGroups.map(renderOption)
       : displayedGroups.map(renderOption);
   }, [filteredGroups, displayedGroups, renderOption, searchText]);
 
-  // Handle dropdown visibility
+  // Обработка видимости выпадающего списка
   const handleDropdownVisibleChange = (open: boolean) => {
     setDropdownOpen(open);
     if (open) {
@@ -84,7 +84,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     }
   };
 
-  // Handle scroll in dropdown
+  // Обработка прокрутки в выпадающем списке
   const handlePopupScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const { currentTarget } = e;
@@ -100,7 +100,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     [displayedGroups, groups]
   );
 
-  // Debounced search handler
+  // Отложенный обработчик поиска
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchText(value);
@@ -131,7 +131,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     { id: 6, name: 'Суббота' },
   ];
 
-  // Временные слоты
+  // Список пар в течение дня
   const timeSlots: TimeSlot[] = [
     { slot: 1, time: '08:30-10:00' },
     { slot: 2, time: '10:10-11:40' },
@@ -142,7 +142,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     { slot: 7, time: '19:10-20:40' },
   ];
 
-  // Получение всех групп
+  // Загружаем список всех групп с сервера
   const fetchGroups = async () => {
     console.log('Starting fetchGroups');
     setLoadingGroups(true);
@@ -221,7 +221,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     );
   };
 
-  // Получение цвета для типа занятия
+  // Определяем цвет карточки в зависимости от типа занятия
   const getActivityTypeColor = (actType: string): string => {
     const typeColors: Record<string, string> = {
       lecture: 'blue',
@@ -240,7 +240,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     return typeColors[actType.toLowerCase()] || 'default';
   };
 
-  // Отображение информации о занятии
+  // Отрисовываем карточку занятия со всей информацией
   const renderClassInfo = (classes: ScheduleItem[]) => {
     if (classes.length === 0) return null;
 
@@ -297,7 +297,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     ));
   };
 
-  // Генерация столбцов для таблицы расписания
+  // Создаём колонки для таблицы расписания
   const generateColumns = (weekType: 'ch' | 'zn') => {
     return [
       {
