@@ -1,4 +1,4 @@
-import React, { ErrorInfo } from 'react';
+import React, { ErrorInfo, memo } from 'react';
 import { Layout, Typography, ConfigProvider, theme, Alert, Button } from 'antd';
 import ScheduleViewer from './components/ScheduleViewer';
 import CurrentWeekIndicator from './components/CurrentWeekIndicator';
@@ -46,6 +46,9 @@ class ErrorBoundary extends React.Component<
 const { Header, Content, Footer } = Layout;
 const { Title } = Typography;
 
+const CurrentWeekIndicatorMemo = memo(CurrentWeekIndicator);
+const ScheduleViewerMemo = memo(ScheduleViewer);
+
 const App: React.FC = () => (
   <ConfigProvider
     theme={{
@@ -73,8 +76,8 @@ const App: React.FC = () => (
           </div>
         </Header>
         <Content style={{ padding: '24px', backgroundColor: '#f5f5f5' }}>
-          <CurrentWeekIndicator />
-          <ScheduleViewer />
+          <CurrentWeekIndicatorMemo />
+          <ScheduleViewerMemo />
         </Content>
         <Footer style={{ textAlign: 'center', backgroundColor: '#fff' }}>
           Semesterly © Konstantin Samoylov, {new Date().getFullYear()}

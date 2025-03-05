@@ -1,13 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
+    <meta
+      name="description"
+      content="Расписание занятий в МГТУ им. Н.Э. Баумана"
+    />
+    <meta name="theme-color" content="#1677ff" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Semesterly - Расписание МГТУ</title>
+
+    <!-- Optimize for mobile -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <div style="padding: 20px; text-align: center">
+        Для работы приложения необходим JavaScript
+      </div>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

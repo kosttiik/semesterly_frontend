@@ -1,10 +1,23 @@
 import axios, { AxiosInstance } from 'axios';
 import { ScheduleItem, Group } from '../types/schedule';
+import CacheService from './cacheService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
+interface WeekInfo {
+  data: {
+    term: number;
+    weekName: string;
+    weekNumber: number;
+    weekShortName: string;
+  };
+  date: string;
+}
+
 class ScheduleService {
   private api: AxiosInstance;
+  private lksApi: AxiosInstance;
+  private scheduleCache: Map<string, ScheduleItem[]> = new Map();
 
   constructor() {
     this.api = axios.create({
@@ -18,18 +31,66 @@ class ScheduleService {
         throw error;
       }
     );
+
+    this.lksApi = axios.create({
+      baseURL: '/lks-api',
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   async getAllGroups(): Promise<Group[]> {
+    // Check cache first
+    const cachedGroups = CacheService.get<Group[]>('groups');
+    if (cachedGroups) {
+      return cachedGroups;
+    }
+
     const { data } = await this.api.get<Group[]>('/get-groups');
-    return Array.isArray(data) ? data : [];
+    const groups = Array.isArray(data) ? data : [];
+
+    // Cache the result
+    CacheService.set('groups', groups);
+    return groups;
   }
 
   async getGroupSchedule(uuid: string): Promise<ScheduleItem[]> {
+    // Check memory cache first
+    const cachedSchedule = this.scheduleCache.get(uuid);
+    if (cachedSchedule) {
+      return cachedSchedule;
+    }
+
+    // Check localStorage cache
+    const cacheKey = `schedule_${uuid}`;
+    const cachedData = CacheService.get<ScheduleItem[]>(cacheKey);
+    if (cachedData) {
+      this.scheduleCache.set(uuid, cachedData);
+      return cachedData;
+    }
+
     const { data } = await this.api.get<ScheduleItem[]>(
       `/get-group-schedule/${uuid}`
     );
-    return data || [];
+    const schedule = data || [];
+
+    // Cache in both memory and localStorage
+    this.scheduleCache.set(uuid, schedule);
+    CacheService.set(cacheKey, schedule);
+
+    return schedule;
+  }
+
+  clearScheduleCache(uuid?: string): void {
+    if (uuid) {
+      this.scheduleCache.delete(uuid);
+      CacheService.remove(`schedule_${uuid}`);
+    } else {
+      this.scheduleCache.clear();
+      // Clear all schedule-related items from localStorage
+      Object.keys(localStorage)
+        .filter((key) => key.startsWith('schedule_'))
+        .forEach((key) => CacheService.remove(key));
+    }
   }
 
   async saveSchedule(scheduleData: unknown): Promise<unknown> {
@@ -45,6 +106,11 @@ class ScheduleService {
       `/insert-group-schedule/${uuid}`,
       scheduleData
     );
+    return data;
+  }
+
+  async getCurrentWeek(): Promise<WeekInfo> {
+    const { data } = await this.lksApi.get<WeekInfo>('/schedules/current');
     return data;
   }
 }

@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react';
 import {
   Tabs,
   Select,
@@ -17,7 +23,6 @@ import { ScheduleItem, Group, TimeSlot, DayOfWeek } from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import { parseTime } from '../utils/timeUtils';
 import dayjs from 'dayjs';
-import debounce from 'lodash/debounce';
 
 const { Title, Text } = Typography;
 
@@ -78,6 +83,9 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
 
+  // Keep track of fetched schedules
+  const fetchedSchedules = useRef<Set<string>>(new Set());
+
   // Memoized schedule map for performance
   const scheduleMap = useMemo<ScheduleMap>(() => {
     const map: ScheduleMap = { ch: {}, zn: {} };
@@ -132,27 +140,52 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     }
   }, []);
 
-  // Fetch schedule data
-  const fetchScheduleData = useCallback(() => {
+  // Optimized schedule data fetching
+  const fetchScheduleData = useCallback(async () => {
     if (selectedGroups.length === 0) {
       setScheduleData([]);
       return;
     }
+
     setLoading(true);
-    Promise.all(
-      selectedGroups.map((groupId) => scheduleService.getGroupSchedule(groupId))
-    )
-      .then((results) => {
-        const combined = results.flat();
-        const uniqueSchedule = combined.filter(
-          (item, index, self) =>
-            index === self.findIndex((t) => t.id === item.id)
+    try {
+      const newSchedules = selectedGroups.filter(
+        (groupId) => !fetchedSchedules.current.has(groupId)
+      );
+
+      if (newSchedules.length > 0) {
+        const results = await Promise.all(
+          newSchedules.map((groupId) =>
+            scheduleService.getGroupSchedule(groupId)
+          )
         );
-        setScheduleData(uniqueSchedule);
-      })
-      .catch(() => message.error('Не удалось загрузить расписание'))
-      .finally(() => setLoading(false));
+
+        newSchedules.forEach((groupId) =>
+          fetchedSchedules.current.add(groupId)
+        );
+
+        setScheduleData((prevData) => {
+          const existingData = prevData.filter((item) =>
+            selectedGroups.some((groupId) =>
+              item.groups.some((g) => g.uuid === groupId)
+            )
+          );
+          return [...existingData, ...results.flat()];
+        });
+      }
+    } catch (error) {
+      message.error('Не удалось загрузить расписание');
+    } finally {
+      setLoading(false);
+    }
   }, [selectedGroups]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      scheduleService.clearScheduleCache();
+    };
+  }, []);
 
   // Initial group fetch
   useEffect(() => {
@@ -165,10 +198,32 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       fetchScheduleData();
   }, [selectedGroups, groupsStatus, fetchScheduleData]);
 
-  // Group selection
-  const handleGroupChange = (selectedIds: string[]) => {
-    setSelectedGroups(selectedIds);
-  };
+  // Handle group selection changes
+  const handleGroupChange = useCallback(
+    (selectedIds: string[]) => {
+      const removedGroups = selectedGroups.filter(
+        (id) => !selectedIds.includes(id)
+      );
+
+      // Clear cache for removed groups
+      removedGroups.forEach((groupId) => {
+        fetchedSchedules.current.delete(groupId);
+        scheduleService.clearScheduleCache(groupId);
+      });
+
+      setSelectedGroups(selectedIds);
+
+      // Update schedule data immediately for removals
+      setScheduleData((prevData) =>
+        prevData.filter((item) =>
+          selectedIds.some((groupId) =>
+            item.groups.some((g) => g.uuid === groupId)
+          )
+        )
+      );
+    },
+    [selectedGroups]
+  );
 
   // Activity type colors
   const getActivityTypeColor = (actType: string): string =>

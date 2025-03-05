@@ -1,49 +1,58 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Typography, Tag, Space } from 'antd';
+import { Card, Typography, Tag, Space, Spin } from 'antd';
 import dayjs from 'dayjs';
 import weekOfYear from 'dayjs/plugin/weekOfYear';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import locale from 'dayjs/locale/ru';
+import { scheduleService } from '../services/scheduleService';
 
 const { Text } = Typography;
 
+// Add required plugins
 dayjs.extend(weekOfYear);
 dayjs.extend(isoWeek);
 dayjs.locale(locale);
 
-// Компонент показывает текущую неделю (числитель/знаменатель) и дату
 const CurrentWeekIndicator: React.FC = () => {
   const [isNumerator, setIsNumerator] = useState<boolean>(false);
   const [currentDate, setCurrentDate] = useState<string>('');
-  const [currentWeekNumber, setCurrentWeekNumber] = useState<number>(0);
+  const [weekNumber, setWeekNumber] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  // Следим за сменой недели и обновляем информацию
   useEffect(() => {
-    // Определяем, является ли текущая неделя числителем или знаменателем
-    // Правило: нечетные недели - числитель, четные - знаменатель
-    const now = dayjs();
-    const weekNum = now.isoWeek();
-
-    setIsNumerator(weekNum % 2 === 1);
-    setCurrentWeekNumber(weekNum);
-    setCurrentDate(now.format('DD MMMM YYYY'));
-
-    // Обновляем каждый день
-    const interval = setInterval(() => {
-      const newDate = dayjs();
-      if (newDate.date() !== now.date()) {
-        setCurrentDate(newDate.format('DD MMMM YYYY'));
-
-        const newWeekNum = newDate.isoWeek();
-        if (newWeekNum !== weekNum) {
-          setCurrentWeekNumber(newWeekNum);
-          setIsNumerator(newWeekNum % 2 === 1);
-        }
+    const fetchWeekInfo = async () => {
+      try {
+        const weekInfo = await scheduleService.getCurrentWeek();
+        setIsNumerator(weekInfo.data.weekShortName === 'чс');
+        setWeekNumber(weekInfo.data.weekNumber);
+        setCurrentDate(dayjs(weekInfo.date).format('DD MMMM YYYY'));
+      } catch (error) {
+        console.error('Failed to fetch week info:', error);
+        // Fallback to client-side calculation
+        const now = dayjs();
+        const weekNum = now.isoWeek();
+        setWeekNumber(weekNum);
+        setIsNumerator(weekNum % 2 === 1);
+        setCurrentDate(now.format('DD MMMM YYYY'));
+      } finally {
+        setLoading(false);
       }
-    }, 3600000); // Проверка каждый час
+    };
 
+    fetchWeekInfo();
+
+    // Update every hour
+    const interval = setInterval(fetchWeekInfo, 3600000);
     return () => clearInterval(interval);
   }, []);
+
+  if (loading) {
+    return (
+      <Card style={{ marginBottom: 16 }}>
+        <Spin size="small" />
+      </Card>
+    );
+  }
 
   return (
     <Card style={{ marginBottom: 16 }}>
@@ -53,12 +62,12 @@ const CurrentWeekIndicator: React.FC = () => {
           <Text>{currentDate}</Text>
         </Space>
         <Space>
-          <Text strong>Неделя #{currentWeekNumber}:</Text>
+          <Text strong>Неделя #{weekNumber}:</Text>
           <Tag
             color={isNumerator ? 'blue' : 'green'}
             style={{ fontSize: '14px' }}
           >
-            {isNumerator ? 'Числитель (нечетная)' : 'Знаменатель (четная)'}
+            {isNumerator ? 'Числитель' : 'Знаменатель'}
           </Tag>
         </Space>
       </Space>
