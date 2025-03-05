@@ -1,99 +1,51 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import { ScheduleItem, Group } from '../types/schedule';
 
-const API_URL = 'http://localhost:8080/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
 
-// Сервис для работы с API расписания
 class ScheduleService {
   private api: AxiosInstance;
 
   constructor() {
     this.api = axios.create({
       baseURL: API_URL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
-
-    this.setupInterceptors();
-  }
-
-  // Настраиваем перехватчики запросов для обработки ошибок
-  private setupInterceptors(): void {
-    this.api.interceptors.request.use(
-      (config) => {
-        // Добавляем заголовки запроса или токены авторизации
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
     this.api.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (axios.isAxiosError(error)) {
-          console.error('Ошибка API:', {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status,
-            url: error.config?.url,
-          });
-        }
-        return Promise.reject(error);
+        console.error('API Error:', error.response?.data || error.message);
+        throw error;
       }
     );
   }
 
-  // Получаем список всех групп
   async getAllGroups(): Promise<Group[]> {
-    try {
-      const { data } = await this.api.get<Group[]>('/get-groups');
-      if (!data) {
-        return [];
-      }
-      return Array.isArray(data) ? data : [];
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        console.error('Axios error:', {
-          message: error.message,
-          response: error.response?.data,
-          status: error.response?.status,
-          url: error.config?.url,
-        });
-      } else {
-        console.error('Error fetching groups:', error);
-      }
-      throw error;
-    }
+    const { data } = await this.api.get<Group[]>('/get-groups');
+    return Array.isArray(data) ? data : [];
   }
 
-  // Получаем расписание конкретной группы
   async getGroupSchedule(uuid: string): Promise<ScheduleItem[]> {
-    try {
-      const response: AxiosResponse<ScheduleItem[]> = await this.api.get(
-        `/get-group-schedule/${uuid}`
-      );
-      return response.data;
-    } catch (error) {
-      console.error('Failed to fetch schedule:', error);
-      return [];
-    }
+    const { data } = await this.api.get<ScheduleItem[]>(
+      `/get-group-schedule/${uuid}`
+    );
+    return data || [];
   }
 
   async saveSchedule(scheduleData: unknown): Promise<unknown> {
-    const response = await this.api.post('/write-schedule', scheduleData);
-    return response.data;
+    const { data } = await this.api.post('/write-schedule', scheduleData);
+    return data;
   }
 
   async insertGroupSchedule(
     uuid: string,
     scheduleData: unknown
   ): Promise<unknown> {
-    const response = await this.api.post(
+    const { data } = await this.api.post(
       `/insert-group-schedule/${uuid}`,
       scheduleData
     );
-    return response.data;
+    return data;
   }
 }
 

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { FC } from 'react';
 import {
   Tabs,
   Select,
@@ -8,20 +7,15 @@ import {
   Typography,
   Space,
   Spin,
-  Input,
   Button,
   Empty,
   message,
   Tooltip,
-  Divider,
 } from 'antd';
-import {
-  SearchOutlined,
-  ReloadOutlined,
-  InfoCircleOutlined,
-} from '@ant-design/icons';
+import { ReloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { ScheduleItem, Group, TimeSlot, DayOfWeek } from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
+import { parseTime } from '../utils/timeUtils';
 import dayjs from 'dayjs';
 import debounce from 'lodash/debounce';
 
@@ -31,212 +25,154 @@ interface ScheduleViewerProps {
   initialGroupIds?: string[];
 }
 
-interface GroupColor {
-  uuid: string;
-  colorIndex: number;
+// Define ScheduleMap type for memoized data structure
+interface ScheduleMap {
+  [weekType: string]: {
+    [day: number]: {
+      [timeSlot: number]: {
+        [groupId: string]: ScheduleItem[];
+      };
+    };
+  };
 }
 
-const ScheduleViewer: FC<ScheduleViewerProps> = ({ initialGroupIds = [] }) => {
-  // Основное хранилище данных компонента
+const DAYS: DayOfWeek[] = [
+  { id: 1, name: 'Понедельник' },
+  { id: 2, name: 'Вторник' },
+  { id: 3, name: 'Среда' },
+  { id: 4, name: 'Четверг' },
+  { id: 5, name: 'Пятница' },
+  { id: 6, name: 'Суббота' },
+];
+
+const TIME_SLOTS: TimeSlot[] = [
+  { slot: 1, time: '08:30-10:00' },
+  { slot: 2, time: '10:10-11:40' },
+  { slot: 3, time: '11:50-13:20' },
+  { slot: 4, time: '14:05-15:35' },
+  { slot: 5, time: '15:50-17:20' },
+  { slot: 6, time: '17:30-19:00' },
+  { slot: 7, time: '19:10-20:40' },
+];
+
+const GROUP_COLORS = [
+  '#1677ff', // blue
+  '#f5222d', // red
+  '#722ed1', // purple
+  '#52c41a', // green
+  '#fa8c16', // orange
+] as const;
+
+const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
+  initialGroupIds = [],
+}) => {
+  // State management
   const [selectedGroups, setSelectedGroups] =
     useState<string[]>(initialGroupIds);
   const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [loadingGroups, setLoadingGroups] = useState<boolean>(false);
+  const [groupsStatus, setGroupsStatus] = useState<
+    'idle' | 'loading' | 'success' | 'error'
+  >('idle');
   const [groups, setGroups] = useState<Group[]>([]);
-  const [searchText, setSearchText] = useState<string>('');
-  const [initialized, setInitialized] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [groupColors, setGroupColors] = useState<GroupColor[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Оптимизация поиска с помощью debounce
-  const [searchValue, setSearchValue] = useState<string>('');
-  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
-  const [displayedGroups, setDisplayedGroups] = useState<Group[]>([]);
-  const pageSize = 50; // Количество элементов для загрузки за раз
+  // Memoized schedule map for performance
+  const scheduleMap = useMemo<ScheduleMap>(() => {
+    const map: ScheduleMap = { ch: {}, zn: {} };
+    ['ch', 'zn'].forEach((weekType) => {
+      map[weekType] = {};
+      DAYS.forEach((day) => {
+        map[weekType][day.id] = {};
+        TIME_SLOTS.forEach((timeSlot) => {
+          map[weekType][day.id][timeSlot.slot] = {};
+          selectedGroups.forEach((groupId) => {
+            const lessons = scheduleData.filter(
+              (item) =>
+                item.day === day.id &&
+                item.time === timeSlot.slot &&
+                (item.week === weekType || item.week === 'all') &&
+                item.groups.some((g) => g.uuid === groupId)
+            );
+            map[weekType][day.id][timeSlot.slot][groupId] = lessons;
+          });
+        });
+      });
+    });
+    return map;
+  }, [scheduleData, selectedGroups]);
 
-  // Мемоизированный рендерер опций
-  const renderOption = useCallback(
-    (group: Group) => ({
-      label: group.name,
-      value: group.uuid,
-    }),
-    []
-  );
-
-  // Отфильтрованные группы с использованием renderOption
-  const filteredGroups = useMemo(() => {
-    if (!dropdownOpen) return [];
-    if (!searchText) return groups.slice(0, pageSize);
-    return groups.filter((group) =>
-      group.name.toLowerCase().includes(searchText.toLowerCase())
-    );
-  }, [groups, searchText, dropdownOpen, pageSize]);
-
-  // Опции выбора с использованием renderOption
-  const selectOptions = useMemo(() => {
-    return searchText
-      ? filteredGroups.map(renderOption)
-      : displayedGroups.map(renderOption);
-  }, [filteredGroups, displayedGroups, renderOption, searchText]);
-
-  // Обработка видимости выпадающего списка
-  const handleDropdownVisibleChange = (open: boolean) => {
-    setDropdownOpen(open);
-    if (open) {
-      setDisplayedGroups(groups.slice(0, pageSize));
-    }
-  };
-
-  // Обработка прокрутки в выпадающем списке
-  const handlePopupScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const { currentTarget } = e;
-      if (
-        currentTarget.scrollTop + currentTarget.clientHeight >=
-        currentTarget.scrollHeight - 50
-      ) {
-        const currentLength = displayedGroups.length;
-        const newGroups = groups.slice(0, currentLength + pageSize);
-        setDisplayedGroups(newGroups);
-      }
+  // Consistent group color assignment
+  const getGroupColor = useCallback(
+    (groupId: string, selectedGroups: string[]): string => {
+      const index = selectedGroups.indexOf(groupId);
+      return GROUP_COLORS[index % GROUP_COLORS.length];
     },
-    [displayedGroups, groups]
-  );
-
-  // Отложенный обработчик поиска
-  const debouncedSearch = useMemo(
-    () =>
-      debounce((value: string) => {
-        setSearchText(value);
-      }, 300),
     []
   );
 
-  // Handle search change with debounce
-  const handleSearch = (value: string) => {
-    setSearchValue(value);
-    debouncedSearch(value);
-  };
-
-  // Clean up debounce on unmount
-  useEffect(() => {
-    return () => {
-      debouncedSearch.cancel();
-    };
-  }, [debouncedSearch]);
-
-  // Константы
-  const days: DayOfWeek[] = [
-    { id: 1, name: 'Понедельник' },
-    { id: 2, name: 'Вторник' },
-    { id: 3, name: 'Среда' },
-    { id: 4, name: 'Четверг' },
-    { id: 5, name: 'Пятница' },
-    { id: 6, name: 'Суббота' },
-  ];
-
-  // Список пар в течение дня
-  const timeSlots: TimeSlot[] = [
-    { slot: 1, time: '08:30-10:00' },
-    { slot: 2, time: '10:10-11:40' },
-    { slot: 3, time: '11:50-13:20' },
-    { slot: 4, time: '14:05-15:35' },
-    { slot: 5, time: '15:50-17:20' },
-    { slot: 6, time: '17:30-19:00' },
-    { slot: 7, time: '19:10-20:40' },
-  ];
-
-  // Загружаем список всех групп с сервера
-  const fetchGroups = async () => {
-    setLoadingGroups(true);
+  // Fetch groups
+  const fetchGroups = useCallback(async () => {
+    setGroupsStatus('loading');
     setError(null);
-
     try {
       const fetchedGroups = await scheduleService.getAllGroups();
       if (fetchedGroups.length === 0) {
         setError('Нет доступных групп');
+        setGroupsStatus('error');
         return;
       }
       setGroups(fetchedGroups);
-      setInitialized(true);
-    } catch (error) {
-      if (error instanceof Error) {
-        setError(error.message || 'Ошибка загрузки групп');
-      } else {
-        setError('Неизвестная ошибка при загрузке групп');
-      }
+      setGroupsStatus('success');
+    } catch {
+      setError('Ошибка загрузки групп');
+      setGroupsStatus('error');
       message.error('Не удалось загрузить список групп');
-    } finally {
-      setLoadingGroups(false);
     }
-  };
+  }, []);
 
-  // Update the memoized fetch function to handle multiple groups and deduplicate items
-  const memoizedFetchScheduleData = useCallback(() => {
+  // Fetch schedule data
+  const fetchScheduleData = useCallback(() => {
     if (selectedGroups.length === 0) {
       setScheduleData([]);
       return;
     }
-
     setLoading(true);
     Promise.all(
       selectedGroups.map((groupId) => scheduleService.getGroupSchedule(groupId))
     )
       .then((results) => {
-        // Deduplicate schedule items based on their unique characteristics
-        const combinedSchedule = results.flat();
-        const uniqueSchedule = combinedSchedule.filter(
+        const combined = results.flat();
+        const uniqueSchedule = combined.filter(
           (item, index, self) =>
-            index ===
-            self.findIndex(
-              (t) =>
-                t.day === item.day &&
-                t.time === item.time &&
-                t.week === item.week &&
-                t.disciplines[0]?.fullName === item.disciplines[0]?.fullName &&
-                t.startTime === item.startTime &&
-                t.endTime === item.endTime
-            )
+            index === self.findIndex((t) => t.id === item.id)
         );
         setScheduleData(uniqueSchedule);
       })
-      .catch((error) => {
-        console.error('Error fetching schedule data:', error);
-        message.error('Не удалось загрузить расписание');
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+      .catch(() => message.error('Не удалось загрузить расписание'))
+      .finally(() => setLoading(false));
   }, [selectedGroups]);
 
-  // Загрузка групп при инициализации
+  // Initial group fetch
   useEffect(() => {
-    let mounted = true;
+    if (groupsStatus === 'idle') fetchGroups();
+  }, [fetchGroups, groupsStatus]);
 
-    const initializeGroups = async () => {
-      if (!initialized && mounted) {
-        await fetchGroups();
-      }
-    };
-
-    initializeGroups();
-
-    return () => {
-      mounted = false;
-    };
-  }); // Empty dependency array
-
-  // Add useEffect to fetch schedule when groups change
+  // Fetch schedule when groups change
   useEffect(() => {
-    if (initialized && selectedGroups.length > 0) {
-      memoizedFetchScheduleData();
-    }
-  }, [selectedGroups, initialized, memoizedFetchScheduleData]);
+    if (groupsStatus === 'success' && selectedGroups.length > 0)
+      fetchScheduleData();
+  }, [selectedGroups, groupsStatus, fetchScheduleData]);
 
-  // Определяем цвет карточки в зависимости от типа занятия
-  const getActivityTypeColor = (actType: string): string => {
-    const typeColors: Record<string, string> = {
+  // Group selection
+  const handleGroupChange = (selectedIds: string[]) => {
+    setSelectedGroups(selectedIds);
+  };
+
+  // Activity type colors
+  const getActivityTypeColor = (actType: string): string =>
+    ({
       lecture: 'blue',
       лекция: 'blue',
       практика: 'green',
@@ -249,188 +185,143 @@ const ScheduleViewer: FC<ScheduleViewerProps> = ({ initialGroupIds = [] }) => {
       credit: 'gold',
       экзамен: 'red',
       exam: 'red',
-    };
-    return typeColors[actType.toLowerCase()] || 'default';
-  };
+    }[actType.toLowerCase()] || 'default');
 
-  const getGroupColorIndex = useCallback(
-    (groupId: string) => {
-      const colorMapping = groupColors.find((gc) => gc.uuid === groupId);
-      return colorMapping ? colorMapping.colorIndex : 0;
-    },
-    [groupColors]
-  );
-
-  // Отрисовываем карточку занятия со всей информацией
-
-  // Add time markers
-
-  // Inside your table cell rendering
-
-  // Создаём колонки для таблицы расписания
-
-  // Определение текущего дня и времени для выделения
+  // Current time highlighting
   const currentDayIndex = dayjs().day();
-  const currentTimeIndex = timeSlots.findIndex((slot) => {
-    const [startHour, startMinute] = slot.time
-      .split('-')[0]
-      .split(':')
-      .map(Number);
-    const [endHour, endMinute] = slot.time.split('-')[1].split(':').map(Number);
-
+  const currentTimeIndex = TIME_SLOTS.findIndex((slot) => {
+    const [start, end] = slot.time.split('-').map((t) => parseTime(t));
     const now = dayjs();
-    const currentHour = now.hour();
-    const currentMinute = now.minute();
-
-    const currentTimeInMinutes = currentHour * 60 + currentMinute;
-    const startTimeInMinutes = startHour * 60 + startMinute;
-    const endTimeInMinutes = endHour * 60 + endMinute;
-
-    return (
-      currentTimeInMinutes >= startTimeInMinutes &&
-      currentTimeInMinutes <= endTimeInMinutes
-    );
+    return now.isAfter(start) && now.isBefore(end);
   });
 
-  const handleGroupChange = (selectedIds: string[]) => {
-    setSelectedGroups(selectedIds);
-
-    // Update color mappings
-    const newGroupColors: GroupColor[] = selectedIds.map((uuid, index) => ({
-      uuid,
-      colorIndex: (index % 5) + 1, // 1-5 colors
-    }));
-    setGroupColors(newGroupColors);
-  };
-
-  // Update renderScheduleTable function
-  const renderScheduleTable = (weekType: 'ch' | 'zn') => {
-    const groupCount = selectedGroups.length;
-
-    // Replace the CSS variable type annotation
-    const tableStyle = {
-      ['--group-count' as string]: groupCount,
-    };
-
-    return (
-      <div className="schedule-table-container">
-        <table
-          className="schedule-table"
-          data-groups={groupCount}
-          style={tableStyle}
-        >
-          <thead>
-            <tr>
-              <th className="time-column">Время</th>
-              {selectedGroups.map((groupId) => {
-                const group = groups.find((g) => g.uuid === groupId);
-                return (
-                  <th key={groupId} className="group-column">
-                    {group?.name || 'Неизвестная группа'}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {days.map((day) => (
-              <React.Fragment key={day.id}>
-                <tr className="day-row">
-                  <td
-                    colSpan={selectedGroups.length + 1}
-                    className="day-header"
-                  >
-                    {day.name}
-                  </td>
-                </tr>
-                {timeSlots.map((timeSlot) => (
-                  <tr
-                    key={`${day.id}-${timeSlot.slot}`}
-                    className={`time-slot-row ${
-                      day.id === currentDayIndex &&
-                      timeSlot.slot === currentTimeIndex + 1
-                        ? 'current-time-slot'
-                        : ''
-                    }`}
-                  >
-                    <td className="time-cell">{timeSlot.time}</td>
-                    {selectedGroups.map((groupId) => {
-                      const lessons = scheduleData.filter(
-                        (item) =>
-                          item.day === day.id &&
-                          item.time === timeSlot.slot &&
-                          (item.week === weekType || item.week === 'all') &&
-                          item.groups.some((g) => g.uuid === groupId)
-                      );
-                      return (
-                        <td key={groupId} className="schedule-cell">
-                          {lessons.map((lesson) => (
-                            <div
-                              key={lesson.id}
-                              className={`lesson-card group-card-${
-                                getGroupColorIndex(groupId) || 1
-                              }`}
-                            >
-                              <div className="lesson-name">
-                                {lesson.disciplines[0]?.fullName}
-                              </div>
-                              <div className="lesson-type">
-                                <Tag
-                                  color={getActivityTypeColor(
-                                    lesson.disciplines[0]?.actType
-                                  )}
-                                >
-                                  {lesson.disciplines[0]?.actType}
-                                </Tag>
-                              </div>
-                              <div className="lesson-location">
-                                {lesson.audiences
-                                  .map((a) => `${a.building} ${a.name}`)
-                                  .join(', ')}
-                              </div>
-                              <div className="lesson-teacher">
-                                {lesson.teachers
-                                  .map(
-                                    (t) =>
-                                      `${t.lastName} ${t.firstName[0]}.${t.middleName[0]}.`
-                                  )
-                                  .join(', ')}
-                              </div>
-                            </div>
-                          ))}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </React.Fragment>
+  // Render schedule table
+  const renderScheduleTable = (weekType: 'ch' | 'zn') => (
+    <div className="schedule-table-container">
+      <table
+        className="schedule-table"
+        data-groups={selectedGroups.length}
+        style={{
+          ['--group-count' as keyof React.CSSProperties]: selectedGroups.length,
+        }}
+      >
+        <thead>
+          <tr>
+            <th className="time-column" scope="col">
+              Время
+            </th>
+            {selectedGroups.map((groupId) => (
+              <th key={groupId} className="group-column" scope="col">
+                {groups.find((g) => g.uuid === groupId)?.name ||
+                  'Неизвестная группа'}
+              </th>
             ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+          </tr>
+        </thead>
+        <tbody>
+          {DAYS.map((day) => (
+            <React.Fragment key={day.id}>
+              <tr className="day-row">
+                <td colSpan={selectedGroups.length + 1} className="day-header">
+                  {day.name}
+                </td>
+              </tr>
+              {TIME_SLOTS.map((timeSlot) => (
+                <tr
+                  key={`${day.id}-${timeSlot.slot}`}
+                  className={
+                    day.id === currentDayIndex &&
+                    timeSlot.slot === currentTimeIndex + 1
+                      ? 'current-time-slot'
+                      : ''
+                  }
+                >
+                  <td className="time-cell" scope="row">
+                    {timeSlot.time}
+                  </td>
+                  {selectedGroups.map((groupId) => (
+                    <td key={groupId} className="schedule-cell">
+                      {(
+                        scheduleMap[weekType][day.id]?.[timeSlot.slot]?.[
+                          groupId
+                        ] || []
+                      ).map((lesson) => (
+                        <div
+                          key={lesson.id}
+                          className="lesson-card"
+                          style={{
+                            borderLeft: `3px solid ${getGroupColor(
+                              groupId,
+                              selectedGroups
+                            )}`,
+                            backgroundColor: `${getGroupColor(
+                              groupId,
+                              selectedGroups
+                            )}10`,
+                          }}
+                        >
+                          <div className="lesson-name">
+                            {lesson.disciplines[0]?.fullName}
+                          </div>
+                          <div className="lesson-type">
+                            <Tag
+                              color={getActivityTypeColor(
+                                lesson.disciplines[0]?.actType
+                              )}
+                            >
+                              {lesson.disciplines[0]?.actType}
+                            </Tag>
+                          </div>
+                          <div className="lesson-location">
+                            {lesson.audiences
+                              .map((a) => `${a.building} ${a.name}`)
+                              .join(', ')}
+                          </div>
+                          <div className="lesson-teacher">
+                            <Tooltip
+                              title={lesson.teachers
+                                .map(
+                                  (t) =>
+                                    `${t.lastName} ${t.firstName} ${t.middleName}`
+                                )
+                                .join(', ')}
+                            >
+                              {lesson.teachers
+                                .map(
+                                  (t) =>
+                                    `${t.lastName} ${t.firstName[0]}.${t.middleName[0]}.`
+                                )
+                                .join(', ')}
+                            </Tooltip>
+                          </div>
+                        </div>
+                      ))}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 
   return (
     <div className="schedule-viewer">
       <Card>
-        {loadingGroups ? (
-          <Spin>
-            <div style={{ padding: 50, textAlign: 'center' }}>
-              <Text>Загрузка групп...</Text>
-            </div>
+        {groupsStatus === 'loading' ? (
+          <Spin tip="Загрузка групп...">
+            <div style={{ padding: 50, textAlign: 'center' }} />
           </Spin>
         ) : error ? (
           <Empty
             description={
               <>
                 <Text type="danger">{error}</Text>
-                <div style={{ marginTop: 8 }}>
-                  <small>Проверьте консоль разработчика для деталей</small>
-                </div>
                 <Button
-                  onClick={fetchGroups}
                   type="primary"
+                  onClick={fetchGroups}
                   style={{ marginTop: 16 }}
                 >
                   Повторить попытку
@@ -438,18 +329,12 @@ const ScheduleViewer: FC<ScheduleViewerProps> = ({ initialGroupIds = [] }) => {
               </>
             }
           />
-        ) : !initialized ? (
-          <Spin>
-            <div style={{ padding: 50, textAlign: 'center' }}>
-              <Text>Загрузка групп...</Text>
-            </div>
+        ) : groupsStatus !== 'success' ? (
+          <Spin tip="Загрузка групп...">
+            <div style={{ padding: 50, textAlign: 'center' }} />
           </Spin>
         ) : (
-          <Space
-            direction="vertical"
-            size="large"
-            style={{ width: '100%', display: 'flex' }}
-          >
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
             <Card>
               <Space direction="vertical" style={{ width: '100%' }}>
                 <Space
@@ -460,92 +345,70 @@ const ScheduleViewer: FC<ScheduleViewerProps> = ({ initialGroupIds = [] }) => {
                   </Title>
                   <Button
                     icon={<ReloadOutlined />}
-                    onClick={memoizedFetchScheduleData}
+                    onClick={fetchScheduleData}
                     disabled={selectedGroups.length === 0}
                   >
                     Обновить
                   </Button>
                 </Space>
+                <Select
+                  mode="multiple"
+                  style={{ width: '100%' }}
+                  placeholder="Выберите группы"
+                  value={selectedGroups}
+                  onChange={handleGroupChange}
+                  loading={loading}
+                  showSearch
+                  searchValue={searchTerm}
+                  onSearch={setSearchTerm}
+                  filterOption={(input, option) =>
+                    (option?.label as string)
+                      ?.toLowerCase()
+                      .includes(input.toLowerCase())
+                  }
+                  onSelect={() => {
+                    // Don't clear the search input after selection
+                    setTimeout(() => {
+                      const selectInput = document.querySelector(
+                        '.ant-select-selection-search-input'
+                      ) as HTMLInputElement;
+                      if (selectInput) {
+                        selectInput.value = searchTerm;
+                      }
+                    }, 0);
+                  }}
+                  options={groups.map((g) => ({
+                    label: g.name,
+                    value: g.uuid,
+                  }))}
+                  tagRender={(props: TagRenderProps) => {
+                    const { label, value, closable, onClose } = props;
+                    if (!value || typeof value !== 'string') return <></>;
 
-                <Divider style={{ margin: '12px 0' }} />
+                    const index = selectedGroups.indexOf(value);
+                    const color = GROUP_COLORS[index % GROUP_COLORS.length];
 
-                <Space style={{ width: '100%' }} direction="vertical">
-                  <Text>Выберите группы для просмотра расписания:</Text>
-                  <Space style={{ width: '100%' }}>
-                    <Input
-                      placeholder="Поиск группы..."
-                      value={searchText}
-                      onChange={(e) => setSearchText(e.target.value)}
-                      prefix={<SearchOutlined />}
-                      style={{ width: 200 }}
-                      allowClear
-                    />
-                    <Select
-                      mode="multiple"
-                      className="groups-select"
-                      size="large"
-                      style={{
-                        width: 'calc(100% - 220px)',
-                        display: 'inline-flex',
-                      }}
-                      dropdownStyle={{
-                        minWidth: '200px',
-                        maxWidth: '400px',
-                      }}
-                      maxTagCount={3}
-                      placeholder="Выберите группы"
-                      value={selectedGroups}
-                      onChange={handleGroupChange}
-                      loading={loadingGroups}
-                      searchValue={searchValue}
-                      onSearch={handleSearch}
-                      options={selectOptions}
-                      filterOption={false}
-                      popupMatchSelectWidth={false}
-                      listHeight={300}
-                      virtual={true}
-                      onDropdownVisibleChange={handleDropdownVisibleChange}
-                      onPopupScroll={handlePopupScroll}
-                      tagRender={(props) => {
-                        const { label, closable, onClose, value } = props;
-                        const colorIndex =
-                          getGroupColorIndex(value as string) || 1;
-                        return (
-                          <Tag
-                            closable={closable}
-                            onClose={onClose}
-                            style={{
-                              margin: '2px',
-                              padding: '4px 8px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              backgroundColor: `var(--group-color-${colorIndex})`,
-                              color: 'white',
-                              border: 'none',
-                            }}
-                          >
-                            {label}
-                          </Tag>
-                        );
-                      }}
-                      dropdownRender={(menu) => (
-                        <div className="groups-dropdown">
-                          <div className="groups-dropdown-header">
-                            Найдено групп: {groups.length}
-                          </div>
-                          <div className="groups-dropdown-content">{menu}</div>
-                        </div>
-                      )}
-                    />
-                    <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
-                      <InfoCircleOutlined />
-                    </Tooltip>
-                  </Space>
-                </Space>
+                    return (
+                      <Tag
+                        color={color}
+                        closable={closable}
+                        onClose={onClose}
+                        style={{
+                          margin: '2px',
+                          color: '#fff',
+                          fontWeight: 500,
+                        }}
+                      >
+                        {label}
+                      </Tag>
+                    );
+                  }}
+                />
+                <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
+                  <InfoCircleOutlined />
+                </Tooltip>
               </Space>
             </Card>
-
             <Spin spinning={loading}>
               {selectedGroups.length > 0 ? (
                 <Tabs
@@ -565,12 +428,7 @@ const ScheduleViewer: FC<ScheduleViewerProps> = ({ initialGroupIds = [] }) => {
                   ]}
                 />
               ) : (
-                <Card>
-                  <Empty
-                    description="Выберите группы для отображения расписания"
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  />
-                </Card>
+                <Empty description="Выберите группы для отображения расписания" />
               )}
             </Spin>
           </Space>
