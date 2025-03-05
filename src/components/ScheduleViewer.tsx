@@ -96,6 +96,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         TIME_SLOTS.forEach((timeSlot) => {
           map[weekType][day.id][timeSlot.slot] = {};
           selectedGroups.forEach((groupId) => {
+            // Get all lessons for this time slot and filter for shared lessons
             const lessons = scheduleData.filter(
               (item) =>
                 item.day === day.id &&
@@ -103,7 +104,21 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                 (item.week === weekType || item.week === 'all') &&
                 item.groups.some((g) => g.uuid === groupId)
             );
-            map[weekType][day.id][timeSlot.slot][groupId] = lessons;
+
+            // Create a map of unique lessons using a composite key
+            const uniqueLessons = lessons.reduce((acc, lesson) => {
+              const key = `${lesson.disciplines[0]?.fullName}_${lesson.teachers
+                .map((t) => t.id)
+                .join('_')}_${lesson.audiences.map((a) => a.id).join('_')}`;
+              if (!acc.has(key)) {
+                acc.set(key, lesson);
+              }
+              return acc;
+            }, new Map());
+
+            map[weekType][day.id][timeSlot.slot][groupId] = Array.from(
+              uniqueLessons.values()
+            );
           });
         });
       });
@@ -173,7 +188,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
           return [...existingData, ...results.flat()];
         });
       }
-    } catch (error) {
+    } catch {
       message.error('Не удалось загрузить расписание');
     } finally {
       setLoading(false);
@@ -302,7 +317,9 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                         ] || []
                       ).map((lesson) => (
                         <div
-                          key={lesson.id}
+                          key={`${lesson.id}_${groupId}_${
+                            lesson.disciplines[0]?.fullName
+                          }_${lesson.teachers.map((t) => t.id).join('_')}`}
                           className="lesson-card"
                           style={{
                             borderLeft: `3px solid ${getGroupColor(
