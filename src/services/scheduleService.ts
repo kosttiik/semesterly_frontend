@@ -48,25 +48,10 @@ class ScheduleService {
   async getAllGroups(): Promise<Group[]> {
     try {
       const { data } = await this.api.get<Group[]>('/get-groups');
-      // Логируем сырой ответ API
-      console.log('Сырой ответ API:', data);
-
       if (!data) {
-        console.error('Нет данных от API');
         return [];
       }
-
-      // Проверяем, что получили массив
-      const groups = Array.isArray(data) ? data : [];
-      console.log('Обработанные группы:', groups);
-
-      // Возвращаем пустой массив, если нет валидных групп
-      if (groups.length === 0) {
-        console.warn('В ответе нет групп');
-        return [];
-      }
-
-      return groups;
+      return Array.isArray(data) ? data : [];
     } catch (error) {
       if (axios.isAxiosError(error)) {
         console.error('Axios error:', {

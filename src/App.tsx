@@ -46,45 +46,42 @@ class ErrorBoundary extends React.Component<
 const { Header, Content, Footer } = Layout;
 const { Title } = Typography;
 
-const App: React.FC = () => {
-  console.log('App rendering');
-  return (
-    <ConfigProvider
-      theme={{
-        algorithm: theme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#1677ff',
-        },
-      }}
-    >
-      <ErrorBoundary>
-        <Layout className="layout" style={{ minHeight: '100vh' }}>
-          <Header
-            style={{
-              background: '#fff',
-              padding: '0 24px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            }}
+const App: React.FC = () => (
+  <ConfigProvider
+    theme={{
+      algorithm: theme.defaultAlgorithm,
+      token: {
+        colorPrimary: '#1677ff',
+      },
+    }}
+  >
+    <ErrorBoundary>
+      <Layout className="layout" style={{ minHeight: '100vh' }}>
+        <Header
+          style={{
+            background: '#fff',
+            padding: '0 24px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          }}
+        >
+          <div
+            style={{ display: 'flex', alignItems: 'center', height: '100%' }}
           >
-            <div
-              style={{ display: 'flex', alignItems: 'center', height: '100%' }}
-            >
-              <Title level={3} style={{ margin: '0', color: '#1677ff' }}>
-                Semesterly
-              </Title>
-            </div>
-          </Header>
-          <Content style={{ padding: '24px', backgroundColor: '#f5f5f5' }}>
-            <CurrentWeekIndicator />
-            <ScheduleViewer />
-          </Content>
-          <Footer style={{ textAlign: 'center', backgroundColor: '#fff' }}>
-            Semesterly © Konstantin Samoylov, {new Date().getFullYear()}
-          </Footer>
-        </Layout>
-      </ErrorBoundary>
-    </ConfigProvider>
-  );
-};
+            <Title level={3} style={{ margin: '0', color: '#1677ff' }}>
+              Semesterly
+            </Title>
+          </div>
+        </Header>
+        <Content style={{ padding: '24px', backgroundColor: '#f5f5f5' }}>
+          <CurrentWeekIndicator />
+          <ScheduleViewer />
+        </Content>
+        <Footer style={{ textAlign: 'center', backgroundColor: '#fff' }}>
+          Semesterly © Konstantin Samoylov, {new Date().getFullYear()}
+        </Footer>
+      </Layout>
+    </ErrorBoundary>
+  </ConfigProvider>
+);
 
 export default App;

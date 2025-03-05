@@ -27,6 +27,7 @@ body {
   transition: all 0.3s;
   margin-bottom: 8px;
   border-radius: 4px;
+  animation: slideIn 0.3s ease-out;
 }
 
 .schedule-viewer .class-card:hover {
@@ -36,7 +37,7 @@ body {
 
 /* Current time highlighting */
 .schedule-table .current-time-row {
-  background-color: rgba(24, 144, 255, 0.05);
+  background-color: rgba(24, 144, 255, 0.03);
 }
 
 /* Responsive styles */
@@ -63,9 +64,202 @@ body {
   border-bottom-color: #fff;
 }
 
-/* Selection styles */
+/* Selection styles - updated with multiple colors */
 .ant-select-multiple .ant-select-selection-item {
-  border-radius: 10px;
+  border-radius: 10px !important;
+  color: white !important;
+  border: none !important;
+  margin: 2px !important;
+  padding: 2px 8px !important;
+  transition: all 0.3s;
+}
+
+/* Color palette for selected groups */
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 1) {
+  background: #1677ff !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 2) {
+  background: #52c41a !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 3) {
+  background: #722ed1 !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 4) {
+  background: #f5222d !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 5) {
+  background: #fa8c16 !important;
+}
+
+/* Hover effects for each color */
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 1):hover {
+  background: #4096ff !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 2):hover {
+  background: #73d13d !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 3):hover {
+  background: #9254de !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 4):hover {
+  background: #ff4d4f !important;
+}
+
+.ant-select-multiple .ant-select-selection-item:nth-child(5n + 5):hover {
+  background: #ffa940 !important;
+}
+
+.ant-select-multiple {
+  min-height: 40px;
+}
+
+.ant-select-multiple .ant-select-selector {
+  min-height: 40px !important;
+  height: auto !important;
+  padding: 4px 4px !important;
+}
+
+.ant-select-multiple .ant-select-selection-overflow {
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 32px !important; /* Ensure minimum height even when empty */
+  padding: 0 4px;
+}
+
+/* Update Select component styles for consistent sizing */
+.ant-select-multiple {
+  min-height: 40px !important;
+}
+
+.ant-select-selector {
+  min-height: 40px !important;
+  height: auto !important;
+}
+
+/* This is crucial for proper sizing */
+.ant-select-selection-overflow {
+  position: relative !important;
+  display: flex !important;
+  flex: auto !important;
+  flex-wrap: wrap !important;
+  max-width: 100% !important;
+  min-height: 40px !important;
+  padding: 4px 4px !important;
+}
+
+/* Fix for selected tags alignment */
+.ant-select-selection-overflow {
+  position: relative !important;
+  display: flex !important;
+  flex: auto !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 4px !important;
+  max-width: 100% !important;
+}
+
+.ant-select-selector {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 0 !important;
+}
+
+.ant-select-selection-search {
+  position: relative !important;
+  width: 100% !important;
+  margin-inline-start: 0 !important;
+  order: 1;
+}
+
+/* Force tags to stay inside the container */
+.ant-select-multiple .ant-select-selector {
+  padding-right: 24px !important; /* Space for the arrow */
+  height: auto !important;
+  min-height: 40px !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+}
+
+/* Ensure the selection box expands properly */
+.groups-select .ant-select-selector {
+  width: 100% !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+.ant-select-selection-overflow-item {
+  flex: none !important;
+  align-self: flex-start !important;
+  max-width: 100% !important;
+  margin: 2px !important;
+}
+
+/* Force the container to expand properly */
+.ant-select-selection-search {
+  position: relative !important;
+  max-width: 100% !important;
+  margin-inline-start: 0 !important;
+  min-width: 60px !important;
+  height: auto !important;
+  line-height: 1.5 !important;
+}
+
+/* Ensure placeholder is properly positioned */
+.ant-select-selection-placeholder {
+  position: absolute !important;
+  top: 50% !important;
+  right: 11px !important;
+  left: 11px !important;
+  transform: translateY(-50%) !important;
+  transition: all 0.3s !important;
+  flex: 1 !important;
+  line-height: 40px !important;
+}
+
+/* Container sizing fixes */
+.groups-select {
+  width: calc(100% - 220px) !important;
+  min-height: 40px !important;
+  height: auto !important;
+}
+
+.ant-select-multiple .ant-select-selection-placeholder {
+  padding: 4px 8px !important;
+  line-height: 32px !important;
+}
+
+.ant-select-multiple.ant-select-lg {
+  min-height: 40px !important;
+}
+
+/* Force minimum height on the select container */
+.ant-select {
+  height: auto !important;
+  min-height: 40px !important;
+}
+
+.ant-select-dropdown {
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Add these styles to prevent layout shifts */
@@ -79,4 +273,515 @@ body {
 
 .ant-spin-container {
   min-height: inherit;
+}
+
+/* Enhanced animations */
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Card hover effects */
+.ant-card {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Table animations */
+.ant-table-row {
+  transition: all 0.3s;
+}
+
+.ant-table-row:hover {
+  background-color: rgba(24, 144, 255, 0.05) !important;
+}
+
+/* Card content animations */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading spinner enhancement */
+.ant-spin {
+  transition: all 0.3s;
+}
+
+.ant-spin-dot-item {
+  background-color: var(--primary-color);
+}
+
+/* Group colors for schedule items */
+:root {
+  --group-color-1: #1677ff;
+  --group-color-2: #52c41a;
+  --group-color-3: #722ed1;
+  --group-color-4: #f5222d;
+  --group-color-5: #fa8c16;
+}
+
+/* Schedule card group colors */
+.group-card-1 {
+  border-left: 3px solid var(--group-color-1) !important;
+  background-color: rgba(22, 119, 255, 0.02) !important;
+}
+
+.group-card-2 {
+  border-left: 3px solid var(--group-color-2) !important;
+  background-color: rgba(82, 196, 26, 0.02) !important;
+}
+
+.group-card-3 {
+  border-left: 3px solid var(--group-color-3) !important;
+  background-color: rgba(114, 46, 209, 0.02) !important;
+}
+
+.group-card-4 {
+  border-left: 3px solid var(--group-color-4) !important;
+  background-color: rgba(245, 34, 45, 0.02) !important;
+}
+
+.group-card-5 {
+  border-left: 3px solid var(--group-color-5) !important;
+  background-color: rgba(250, 140, 22, 0.02) !important;
+}
+
+/* Fix Select component alignment and sizing */
+.ant-select-multiple {
+  min-height: 40px !important;
+}
+
+.ant-select-multiple .ant-select-selector {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 40px !important;
+  padding: 4px 24px 4px 4px !important;
+}
+
+.ant-select-multiple .ant-select-selection-overflow {
+  position: static !important;
+  flex-wrap: wrap !important;
+  width: 100% !important;
+}
+
+.ant-select-multiple .ant-select-selection-overflow-item {
+  position: static !important;
+}
+
+.ant-select-multiple .ant-select-selection-search {
+  position: static !important;
+  width: 100% !important;
+  margin-left: 0 !important;
+}
+
+/* New dropdown styling for the groups Select */
+.groups-dropdown {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.groups-dropdown-header {
+  padding: 8px 12px;
+  background-color: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  font-size: 14px;
+  color: #666;
+}
+
+.groups-dropdown-content {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Group names at the top */
+.group-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Fix dropdown menu issue */
+.groups-dropdown {
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.groups-dropdown-header {
+  padding: 8px 12px;
+  background-color: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  font-size: 14px;
+  color: #666;
+}
+
+.groups-dropdown-content {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Schedule table styles */
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #e8e8e8;
+  padding: 8px;
+  text-align: left;
+}
+
+.schedule-table th {
+  background-color: #f0f5ff;
+  font-weight: 600;
+}
+
+.schedule-table td {
+  vertical-align: top;
+}
+
+.schedule-table .current-time-row {
+  background-color: rgba(24, 144, 255, 0.03);
+}
+
+/* Enhanced schedule table styles */
+.schedule-table-container {
+  overflow-x: auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  margin: 0;
+  width: 100%;
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  table-layout: fixed; /* Force equal column distribution */
+}
+
+.schedule-table th,
+.schedule-table td {
+  border: 1px solid #e8e8e8;
+  padding: 8px;
+  text-align: left;
+}
+
+.schedule-table th {
+  background-color: #f0f5ff;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.time-column {
+  width: 100px;
+  position: sticky;
+  left: 0;
+  background-color: #f0f5ff;
+  z-index: 3;
+}
+
+.group-column {
+  min-width: unset;
+  width: calc((100% - 100px) / var(--group-count, 1));
+  text-align: center;
+}
+
+/* Single group view optimization */
+.schedule-table[data-groups='1'] .group-column {
+  min-width: 300px; /* Minimum width for single group */
+  max-width: 800px; /* Maximum width for single group */
+}
+
+/* Center table when single group */
+.schedule-table[data-groups='1'] {
+  margin: 0 auto;
+  max-width: 900px; /* time-column + max group-column */
+}
+
+.day-header {
+  background-color: #fafafa;
+  font-weight: 600;
+  text-align: left;
+  padding: 12px 8px;
+}
+
+.time-cell {
+  position: sticky;
+  left: 0;
+  background-color: white;
+  z-index: 1;
+  width: 100px;
+  text-align: center;
+  color: #666;
+}
+
+.schedule-cell {
+  vertical-align: top;
+  min-height: 100px;
+  padding: 8px;
+}
+
+/* Adjust cell padding based on group count */
+.schedule-table[data-groups='1'] .schedule-cell,
+.schedule-table[data-groups='2'] .schedule-cell {
+  padding: 12px;
+}
+
+.schedule-table[data-groups='3'] .schedule-cell {
+  padding: 10px;
+}
+
+.schedule-table[data-groups='4'] .schedule-cell,
+.schedule-table[data-groups='5'] .schedule-cell {
+  padding: 8px;
+}
+
+.lesson-card {
+  padding: 8px;
+  margin-bottom: 8px;
+  border-radius: 4px;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+}
+
+/* Optimize lesson card size based on group count */
+.schedule-table[data-groups='1'] .lesson-card {
+  padding: 12px;
+}
+
+.schedule-table[data-groups='2'] .lesson-card,
+.schedule-table[data-groups='3'] .lesson-card {
+  padding: 10px;
+}
+
+.schedule-table[data-groups='4'] .lesson-card,
+.schedule-table[data-groups='5'] .lesson-card {
+  padding: 8px;
+}
+
+.lesson-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.lesson-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.lesson-type {
+  margin-bottom: 4px;
+}
+
+.lesson-location {
+  color: #666;
+  font-size: 0.9em;
+  margin-bottom: 2px;
+}
+
+.lesson-teacher {
+  color: #666;
+  font-size: 0.9em;
+}
+
+.current-time-slot {
+  background-color: rgba(24, 144, 255, 0.05);
+}
+
+.groups-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.groups-select {
+  width: 100% !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .schedule-table-container {
+    margin: 0;
+    overflow-x: auto;
+  }
+
+  .group-column {
+    min-width: 200px; /* Minimum width for mobile */
+  }
+
+  .time-column {
+    width: 80px;
+  }
+
+  .lesson-card {
+    padding: 6px;
+  }
+}
+
+/* Fix Select component styling */
+.ant-select-selector {
+  border-radius: 4px !important;
+}
+
+.ant-select-dropdown {
+  border-radius: 4px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  width: auto !important; /* Override any dynamic width calculations */
+  min-width: 200px !important;
+  max-width: 400px !important;
+}
+
+.ant-select-item {
+  padding: 8px 12px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 6px 12px !important;
+  font-size: 14px !important;
+}
+
+/* Prevent dropdown from changing size */
+.ant-select-dropdown .ant-select-item-option-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 380px;
+}
+
+/* Schedule table enhancements */
+.schedule-cell {
+  position: relative;
+  height: var(--time-slot-height, 100px);
+  padding: 0 !important;
+  vertical-align: top;
+  background: linear-gradient(
+    to bottom,
+    #f0f0f0 1px,
+    transparent 1px,
+    transparent 14px,
+    #fafafa 14px,
+    #fafafa 15px,
+    transparent 15px,
+    transparent 29px,
+    #fafafa 29px,
+    #fafafa 30px,
+    transparent 30px,
+    transparent 44px,
+    #fafafa 44px,
+    #fafafa 45px,
+    transparent 45px,
+    transparent 59px,
+    #fafafa 59px,
+    #fafafa 60px,
+    transparent 60px,
+    transparent 74px,
+    #fafafa 74px,
+    #fafafa 75px,
+    transparent 75px,
+    transparent 89px,
+    #fafafa 89px,
+    #fafafa 90px,
+    transparent 90px
+  );
+}
+
+.lesson-card {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  border-radius: 4px;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s;
+  z-index: 1;
+  overflow: hidden;
+}
+
+.lesson-card:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  z-index: 2;
+}
+
+/* Time markers */
+.time-marker {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+}
+
+.time-marker-label {
+  position: absolute;
+  left: -65px;
+  top: -10px;
+  font-size: 11px;
+  color: #999;
+  width: 60px;
+  text-align: right;
+}
+
+/* Current time indicator */
+.current-time-indicator {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #ff4d4f;
+  z-index: 3;
+}
+
+.current-time-indicator::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  background-color: #ff4d4f;
+  border-radius: 50%;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .schedule-cell {
+    height: 80px;
+  }
+
+  .lesson-card {
+    font-size: 12px;
+  }
 }
