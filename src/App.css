@@ -78,13 +78,14 @@ body {
   min-height: 100px;
 }
 
+/* Card styling */
 .lesson-card {
   padding: 8px;
   margin-bottom: 8px;
   border-radius: 4px;
   background-color: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s;
+  transition: all 0.4s ease; /* Slower animation */
 }
 
 .lesson-card:hover {
@@ -92,10 +93,91 @@ body {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
+.lesson-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.lesson-name-container {
+  flex: 1;
+}
+
+.lesson-time {
+  font-size: 0.85em;
+  color: #8c8c8c;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .lesson-name {
   font-weight: 500;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
+.lesson-name span {
+  cursor: default;
+}
+
+.lesson-name span[data-has-tooltip='true'],
+.lesson-teacher span,
+.lesson-name-container .short-name {
+  cursor: help;
+}
+
+/* Dynamic discipline name behavior */
+.lesson-name .full-name,
+.lesson-name-container .full-name {
+  display: block;
+}
+
+.lesson-name .short-name,
+.lesson-name-container .short-name {
+  display: none;
+}
+
+/* Mobile first - only apply short names on very small screens */
+@media (max-width: 576px) {
+  .lesson-name-container .full-name {
+    display: none;
+  }
+  .lesson-name-container .short-name[data-has-tooltip='true'] {
+    display: block;
+  }
+}
+
+/* For multiple groups, adjust based on count and screen size */
+@media (max-width: 1200px) {
+  .schedule-table[data-groups='3'] .lesson-name-container .full-name {
+    display: none;
+  }
+  .schedule-table[data-groups='3']
+    .lesson-name-container
+    .short-name[data-has-tooltip='true'] {
+    display: block;
+  }
+}
+
+@media (max-width: 1400px) {
+  .schedule-table[data-groups='4'] .lesson-name-container .full-name,
+  .schedule-table[data-groups='5'] .lesson-name-container .full-name {
+    display: none;
+  }
+  .schedule-table[data-groups='4']
+    .lesson-name-container
+    .short-name[data-has-tooltip='true'],
+  .schedule-table[data-groups='5']
+    .lesson-name-container
+    .short-name[data-has-tooltip='true'] {
+    display: block;
+  }
+}
+
 .lesson-type {
   margin-bottom: 4px;
 }
@@ -103,6 +185,10 @@ body {
 .lesson-teacher {
   color: #666;
   font-size: 0.9em;
+}
+
+.lesson-teacher span {
+  cursor: help;
 }
 
 .current-time-slot {
@@ -164,4 +250,51 @@ body {
 
 .ant-select-dropdown .ant-select-item-option-selected {
   font-weight: 600 !important;
+}
+
+/* Tooltip styling */
+.ant-tooltip {
+  pointer-events: none;
+}
+
+.ant-tooltip-inner {
+  max-width: 300px;
+  padding: 8px 12px;
+}
+
+.ant-tooltip-inner b {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Dynamic discipline name behavior */
+.lesson-name-container .full-name {
+  display: block;
+}
+
+.lesson-name-container .short-name {
+  display: none;
+}
+
+/* When space is constrained, show abbreviated name */
+@media (max-width: 768px) {
+  .lesson-name-container .full-name {
+    display: none;
+  }
+  .lesson-name-container .short-name {
+    display: block;
+  }
+}
+
+/* For multiple groups, show short names on smaller screens */
+.schedule-table[data-groups]:not([data-groups='1'])
+  .lesson-name-container
+  .full-name {
+  display: none;
+}
+
+.schedule-table[data-groups]:not([data-groups='1'])
+  .lesson-name-container
+  .short-name {
+  display: block;
 }

@@ -18,13 +18,22 @@ import {
   message,
   Tooltip,
 } from 'antd';
+import type { SelectProps } from 'antd';
 import { ReloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
-import { ScheduleItem, Group, TimeSlot, DayOfWeek } from '../types/schedule';
+import {
+  ScheduleItem,
+  Group,
+  Teacher,
+  TimeSlot,
+  DayOfWeek,
+} from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import { parseTime } from '../utils/timeUtils';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
+
+type CustomTagProps = Parameters<NonNullable<SelectProps['tagRender']>>[0];
 
 interface ScheduleViewerProps {
   initialGroupIds?: string[];
@@ -265,6 +274,15 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     return now.isAfter(start) && now.isBefore(end);
   });
 
+  // Helper function to format teacher name - simplified to last name and initials only
+  const formatTeacherFullName = (teacher: Teacher): string => {
+    return `${teacher.lastName} ${teacher.firstName} ${teacher.middleName}`;
+  };
+
+  const formatTeacherInitials = (teacher: Teacher): string => {
+    return `${teacher.lastName} ${teacher.firstName[0]}.${teacher.middleName[0]}.`;
+  };
+
   // Render schedule table
   const renderScheduleTable = (weekType: 'ch' | 'zn') => (
     <div className="schedule-table-container">
@@ -332,8 +350,45 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                             )}10`,
                           }}
                         >
-                          <div className="lesson-name">
-                            {lesson.disciplines[0]?.fullName}
+                          <div className="lesson-header">
+                            <div className="lesson-name-container">
+                              {lesson.disciplines[0]?.abbr &&
+                              lesson.disciplines[0]?.fullName &&
+                              lesson.disciplines[0]?.abbr !==
+                                lesson.disciplines[0]?.fullName ? (
+                                <>
+                                  <span className="full-name">
+                                    {lesson.disciplines[0].fullName}
+                                  </span>
+                                  <Tooltip
+                                    title={
+                                      <div style={{ textAlign: 'left' }}>
+                                        <b>{lesson.disciplines[0].fullName}</b>
+                                      </div>
+                                    }
+                                    placement="topLeft"
+                                    mouseEnterDelay={0.2}
+                                    mouseLeaveDelay={0.1}
+                                  >
+                                    <span
+                                      className="short-name"
+                                      data-has-tooltip="true"
+                                    >
+                                      {lesson.disciplines[0].abbr}
+                                    </span>
+                                  </Tooltip>
+                                </>
+                              ) : (
+                                <span className="full-name">
+                                  {lesson.disciplines[0]?.fullName ||
+                                    lesson.disciplines[0]?.abbr ||
+                                    'Нет названия'}
+                                </span>
+                              )}
+                            </div>
+                            <div className="lesson-time">
+                              {lesson.startTime}–{lesson.endTime}
+                            </div>
                           </div>
                           <div className="lesson-type">
                             <Tag
@@ -351,19 +406,27 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                           </div>
                           <div className="lesson-teacher">
                             <Tooltip
-                              title={lesson.teachers
-                                .map(
-                                  (t) =>
-                                    `${t.lastName} ${t.firstName} ${t.middleName}`
-                                )
-                                .join(', ')}
+                              title={
+                                <div style={{ textAlign: 'left' }}>
+                                  {lesson.teachers.map((t, i) => (
+                                    <div key={t.id}>
+                                      {formatTeacherFullName(t)}
+                                      {i < lesson.teachers.length - 1 ? (
+                                        <br />
+                                      ) : null}
+                                    </div>
+                                  ))}
+                                </div>
+                              }
+                              placement="bottom"
+                              mouseEnterDelay={0.2} // Slightly slower tooltip appearance
+                              mouseLeaveDelay={0.1}
                             >
-                              {lesson.teachers
-                                .map(
-                                  (t) =>
-                                    `${t.lastName} ${t.firstName[0]}.${t.middleName[0]}.`
-                                )
-                                .join(', ')}
+                              <span>
+                                {lesson.teachers
+                                  .map(formatTeacherInitials)
+                                  .join(', ')}
+                              </span>
                             </Tooltip>
                           </div>
                         </div>
@@ -453,8 +516,9 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                     label: g.name,
                     value: g.uuid,
                   }))}
-                  tagRender={(props: TagRenderProps) => {
+                  tagRender={(props: CustomTagProps) => {
                     const { label, value, closable, onClose } = props;
+
                     if (!value || typeof value !== 'string') return <></>;
 
                     const index = selectedGroups.indexOf(value);
