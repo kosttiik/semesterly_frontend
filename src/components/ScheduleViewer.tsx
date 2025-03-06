@@ -173,44 +173,48 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   }, []);
 
   // Optimized schedule data fetching
-  const fetchScheduleData = useCallback(async () => {
-    if (selectedGroups.length === 0) {
-      setScheduleData([]);
-      return;
-    }
+  const fetchScheduleData = useCallback(
+    async (forceRefresh = false) => {
+      if (selectedGroups.length === 0) {
+        setScheduleData([]);
+        return;
+      }
 
-    setLoading(true);
-    try {
-      const newSchedules = selectedGroups.filter(
-        (groupId) => !fetchedSchedules.current.has(groupId)
-      );
+      setLoading(true);
+      try {
+        // If force refresh, clear cache for selected groups
+        if (forceRefresh) {
+          selectedGroups.forEach((groupId) => {
+            fetchedSchedules.current.delete(groupId);
+            scheduleService.clearScheduleCache(groupId);
+          });
+        }
 
-      if (newSchedules.length > 0) {
-        const results = await Promise.all(
-          newSchedules.map((groupId) =>
-            scheduleService.getGroupSchedule(groupId)
-          )
+        const newSchedules = selectedGroups.filter(
+          (groupId) => !fetchedSchedules.current.has(groupId)
         );
 
-        newSchedules.forEach((groupId) =>
-          fetchedSchedules.current.add(groupId)
-        );
-
-        setScheduleData((prevData) => {
-          const existingData = prevData.filter((item) =>
-            selectedGroups.some((groupId) =>
-              item.groups.some((g) => g.uuid === groupId)
+        if (newSchedules.length > 0 || forceRefresh) {
+          const results = await Promise.all(
+            selectedGroups.map((groupId) =>
+              scheduleService.getGroupSchedule(groupId)
             )
           );
-          return [...existingData, ...results.flat()];
-        });
+
+          selectedGroups.forEach((groupId) =>
+            fetchedSchedules.current.add(groupId)
+          );
+
+          setScheduleData(results.flat());
+        }
+      } catch {
+        message.error('Не удалось загрузить расписание');
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      message.error('Не удалось загрузить расписание');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedGroups]);
+    },
+    [selectedGroups]
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -532,7 +536,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                   </Space>
                   <Button
                     icon={<ReloadOutlined />}
-                    onClick={fetchScheduleData}
+                    onClick={() => fetchScheduleData(true)}
                     disabled={selectedGroups.length === 0}
                   >
                     Обновить

@@ -5,10 +5,22 @@ body {
     'Helvetica Neue', Arial, sans-serif;
 }
 
+/* Add this near the top of the file with other global styles */
+.layout {
+  overflow-x: hidden;
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Schedule viewer */
 .schedule-viewer {
   max-width: 100%;
   margin: 0 auto;
+  animation: fadeIn 0.3s ease-out; /* Reduced from 1s */
+  animation-delay: 0.1s; /* Reduced from 0.4s */
+  animation-fill-mode: both;
 }
 
 .schedule-table-container {
@@ -16,12 +28,19 @@ body {
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  animation: fadeIn 0.3s ease-out; /* Reduced from 0.8s */
+  animation-delay: 0s; /* Removed delay */
+  animation-fill-mode: both;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .schedule-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+  transition: max-width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: max-width;
 }
 
 .schedule-table th,
@@ -49,11 +68,16 @@ body {
 .group-column {
   width: calc((100% - 100px) / var(--group-count, 1));
   text-align: center;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1); /* Faster transition */
+  animation: groupSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1); /* Faster animation */
+  transform-origin: left center;
+  will-change: width, transform;
 }
 
 .schedule-table[data-groups='1'] .group-column {
   min-width: 300px;
   max-width: 800px;
+  transition-duration: 0.2s; /* Faster transition for first/last group */
 }
 
 .schedule-table[data-groups='1'] {
@@ -76,6 +100,8 @@ body {
 .schedule-cell {
   vertical-align: top;
   min-height: 100px;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width;
 }
 
 /* Card styling */
@@ -85,7 +111,7 @@ body {
   border-radius: 4px;
   background-color: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  transition: all 0.4s ease; /* Slower animation */
+  transition: all 0.2s ease; /* Faster transition */
 }
 
 .lesson-card:hover {
@@ -236,4 +262,115 @@ body {
 .ant-tooltip-inner b {
   display: block;
   margin-bottom: 4px;
+}
+
+.text-semesterly {
+  color: #1677ff;
+}
+
+/* Animation keyframes */
+@keyframes slideInDown {
+  from {
+    transform: translateY(-30px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    transform: translateY(15px); /* Reduced from 20px to prevent overflow */
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Add new keyframes for group animations */
+@keyframes groupSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scaleX(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scaleX(1);
+  }
+}
+
+/* Add animation classes */
+.ant-layout-header {
+  animation: slideInDown 0.6s ease-out;
+  will-change: transform, opacity;
+}
+
+.ant-layout-content {
+  animation: fadeIn 0.8s ease-out;
+  min-height: 200px; /* Ensures consistent minimum height */
+  position: relative;
+  flex: 1;
+  will-change: opacity;
+}
+
+.ant-layout-footer {
+  animation: fadeIn 0.6s ease-out;
+  animation-delay: 0.3s;
+  animation-fill-mode: both;
+  position: relative;
+  bottom: 0;
+  will-change: opacity;
+}
+
+/* Card entrance animations */
+.ant-card {
+  animation: fadeIn 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.schedule-viewer .ant-card:nth-child(1) {
+  animation-delay: 0.1s; /* Reduced from 0.5s */
+}
+
+.schedule-viewer .ant-card:nth-child(2) {
+  animation-delay: 0.2s; /* Reduced from 0.7s */
+}
+
+/* Empty state animation */
+.ant-empty {
+  animation: fadeIn 0.2s ease-out;
+  animation-delay: 0.1s;
+  animation-fill-mode: both;
+}
+
+/* Loading state animation */
+.ant-spin {
+  animation: fadeIn 0.4s ease-out;
+}
+
+/* Lesson card animations in new columns */
+.schedule-cell .lesson-card {
+  animation: fadeIn 0.3s ease-out backwards;
+}
+
+/* Optimize tab content switching */
+.ant-tabs-content-holder {
+  transition: none !important; /* Remove default antd transition */
+}
+
+.ant-tabs-tabpane {
+  animation: fadeIn 0.15s ease-out; /* Quick fade for tab content */
 }

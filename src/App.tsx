@@ -1,7 +1,8 @@
 import React, { ErrorInfo, memo } from 'react';
-import { Layout, Typography, ConfigProvider, theme, Alert, Button } from 'antd';
+import { Layout, ConfigProvider, theme, Alert, Button } from 'antd';
 import ScheduleViewer from './components/ScheduleViewer';
 import CurrentWeekIndicator from './components/CurrentWeekIndicator';
+import BlurText from './components/BlurText';
 import './App.css';
 
 class ErrorBoundary extends React.Component<
@@ -32,7 +33,7 @@ class ErrorBoundary extends React.Component<
           showIcon
           action={
             <Button type="primary" onClick={() => window.location.reload()}>
-              Refresh Page
+              Перезагрузить страницу
             </Button>
           }
         />
@@ -44,7 +45,6 @@ class ErrorBoundary extends React.Component<
 }
 
 const { Header, Content, Footer } = Layout;
-const { Title } = Typography;
 
 const CurrentWeekIndicatorMemo = memo(CurrentWeekIndicator);
 const ScheduleViewerMemo = memo(ScheduleViewer);
@@ -70,9 +70,13 @@ const App: React.FC = () => (
           <div
             style={{ display: 'flex', alignItems: 'center', height: '100%' }}
           >
-            <Title level={3} style={{ margin: '0', color: '#1677ff' }}>
-              Semesterly
-            </Title>
+            <BlurText
+              text="Semesterly"
+              delay={100}
+              animateBy="letters"
+              direction="top"
+              className="text-4xl text-semesterly"
+            />
           </div>
         </Header>
         <Content style={{ padding: '24px', backgroundColor: '#f5f5f5' }}>
