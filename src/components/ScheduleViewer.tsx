@@ -19,7 +19,12 @@ import {
   Tooltip,
 } from 'antd';
 import type { SelectProps } from 'antd';
-import { ReloadOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import {
+  ReloadOutlined,
+  InfoCircleOutlined,
+  CompressOutlined,
+  ExpandOutlined,
+} from '@ant-design/icons';
 import {
   ScheduleItem,
   Group,
@@ -32,6 +37,8 @@ import { parseTime } from '../utils/timeUtils';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
+
+const DROPDOWN_ITEM_HEIGHT = 32; // height of each dropdown item in pixels
 
 type CustomTagProps = Parameters<NonNullable<SelectProps['tagRender']>>[0];
 
@@ -91,6 +98,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   const [groups, setGroups] = useState<Group[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [useShortNames, setUseShortNames] = useState(false);
 
   // Keep track of fetched schedules
   const fetchedSchedules = useRef<Set<string>>(new Set());
@@ -252,19 +260,37 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   // Activity type colors
   const getActivityTypeColor = (actType: string): string =>
     ({
-      lecture: 'blue',
+      // Russian variants
       лекция: 'blue',
-      практика: 'green',
-      practice: 'green',
-      лабораторная: 'purple',
-      laboratory: 'purple',
+      'лаб. работа': 'purple',
+      'практ. работа': 'green',
       семинар: 'orange',
-      seminar: 'orange',
-      зачет: 'gold',
-      credit: 'gold',
+      зачёт: 'gold',
       экзамен: 'red',
+      // English variants - map to same colors
+      lecture: 'blue',
+      laboratory: 'purple',
+      practice: 'green',
+      seminar: 'orange',
+      credit: 'gold',
       exam: 'red',
+      // Handle full forms too
+      лабораторная: 'purple',
+      практика: 'green',
+      зачет: 'gold', // Handle both with and without ё
     }[actType.toLowerCase()] || 'default');
+
+  // Add this translation function near the other utility functions
+  const translateActivityType = (actType: string): string =>
+    ({
+      lecture: 'лекция',
+      lab: 'лаб. работа',
+      practice: 'практ. работа',
+      seminar: 'семинар',
+      credit: 'зачёт',
+      exam: 'экзамен',
+      // Add any other translations needed
+    }[actType.toLowerCase()] || actType);
 
   // Current time highlighting
   const currentDayIndex = dayjs().day();
@@ -352,38 +378,38 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                         >
                           <div className="lesson-header">
                             <div className="lesson-name-container">
-                              {lesson.disciplines[0]?.abbr &&
-                              lesson.disciplines[0]?.fullName &&
-                              lesson.disciplines[0]?.abbr !==
-                                lesson.disciplines[0]?.fullName ? (
+                              {lesson.disciplines[0] ? (
                                 <>
                                   <span className="full-name">
-                                    {lesson.disciplines[0].fullName}
+                                    {lesson.disciplines[0].fullName ||
+                                      lesson.disciplines[0].abbr ||
+                                      'Нет названия'}
                                   </span>
                                   <Tooltip
                                     title={
                                       <div style={{ textAlign: 'left' }}>
-                                        <b>{lesson.disciplines[0].fullName}</b>
+                                        <b>
+                                          {lesson.disciplines[0].fullName ||
+                                            lesson.disciplines[0].abbr ||
+                                            'Нет названия'}
+                                        </b>
                                       </div>
                                     }
                                     placement="topLeft"
                                     mouseEnterDelay={0.2}
                                     mouseLeaveDelay={0.1}
                                   >
-                                    <span
-                                      className="short-name"
-                                      data-has-tooltip="true"
-                                    >
-                                      {lesson.disciplines[0].abbr}
+                                    <span className="short-name">
+                                      {(lesson.disciplines[0].abbr !==
+                                        lesson.disciplines[0].fullName &&
+                                        lesson.disciplines[0].abbr) ||
+                                        lesson.disciplines[0].fullName ||
+                                        'Нет названия'}
                                     </span>
                                   </Tooltip>
                                 </>
                               ) : (
-                                <span className="full-name">
-                                  {lesson.disciplines[0]?.fullName ||
-                                    lesson.disciplines[0]?.abbr ||
-                                    'Нет названия'}
-                                </span>
+                                <span className="full-name">Нет названия</span>
                               )}
                             </div>
                             <div className="lesson-time">
@@ -396,7 +422,9 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                                 lesson.disciplines[0]?.actType
                               )}
                             >
-                              {lesson.disciplines[0]?.actType}
+                              {translateActivityType(
+                                lesson.disciplines[0]?.actType
+                              )}
                             </Tag>
                           </div>
                           <div className="lesson-location">
@@ -475,9 +503,33 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                 <Space
                   style={{ width: '100%', justifyContent: 'space-between' }}
                 >
-                  <Title level={4} style={{ margin: 0 }}>
-                    Расписание занятий
-                  </Title>
+                  <Space align="center">
+                    <Space>
+                      <Title level={4} style={{ margin: 0, marginTop: -4 }}>
+                        Расписание занятий
+                      </Title>
+                      <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
+                        <InfoCircleOutlined
+                          style={{ fontSize: '16px', color: '#1677ff' }}
+                        />
+                      </Tooltip>
+                    </Space>
+                    <Button
+                      icon={
+                        useShortNames ? (
+                          <ExpandOutlined />
+                        ) : (
+                          <CompressOutlined />
+                        )
+                      }
+                      onClick={() => setUseShortNames(!useShortNames)}
+                      size="small"
+                    >
+                      {useShortNames
+                        ? 'Полные названия'
+                        : 'Сокращённые названия'}
+                    </Button>
+                  </Space>
                   <Button
                     icon={<ReloadOutlined />}
                     onClick={fetchScheduleData}
@@ -502,7 +554,6 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                       .includes(input.toLowerCase())
                   }
                   onSelect={() => {
-                    // Don't clear the search input after selection
                     setTimeout(() => {
                       const selectInput = document.querySelector(
                         '.ant-select-selection-search-input'
@@ -512,9 +563,41 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                       }
                     }, 0);
                   }}
-                  options={groups.map((g) => ({
+                  virtual={true}
+                  listHeight={256}
+                  optionLabelProp="label"
+                  dropdownRender={(menu) => (
+                    <div>
+                      <div
+                        style={{
+                          padding: '8px 12px',
+                          borderBottom: '1px solid #f0f0f0',
+                          fontWeight: 500,
+                          color: '#666',
+                        }}
+                      >
+                        Количество групп: {groups.length}
+                      </div>
+                      {menu}
+                    </div>
+                  )}
+                  options={groups.map((g, index) => ({
                     label: g.name,
                     value: g.uuid,
+                    children: (
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          height: DROPDOWN_ITEM_HEIGHT,
+                          alignItems: 'center',
+                          padding: '0 8px',
+                        }}
+                      >
+                        <span>{g.name}</span>
+                        <span style={{ color: '#8c8c8c' }}>#{index + 1}</span>
+                      </div>
+                    ),
                   }))}
                   tagRender={(props: CustomTagProps) => {
                     const { label, value, closable, onClose } = props;
@@ -540,29 +623,32 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                     );
                   }}
                 />
-                <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
-                  <InfoCircleOutlined />
-                </Tooltip>
               </Space>
             </Card>
             <Spin spinning={loading}>
               {selectedGroups.length > 0 ? (
-                <Tabs
-                  defaultActiveKey="numerator"
-                  type="card"
-                  items={[
-                    {
-                      key: 'numerator',
-                      label: 'Числитель',
-                      children: renderScheduleTable('ch'),
-                    },
-                    {
-                      key: 'denominator',
-                      label: 'Знаменатель',
-                      children: renderScheduleTable('zn'),
-                    },
-                  ]}
-                />
+                <div
+                  className={`schedule-container ${
+                    useShortNames ? 'use-short-names' : ''
+                  }`}
+                >
+                  <Tabs
+                    defaultActiveKey="numerator"
+                    type="card"
+                    items={[
+                      {
+                        key: 'numerator',
+                        label: 'Числитель',
+                        children: renderScheduleTable('ch'),
+                      },
+                      {
+                        key: 'denominator',
+                        label: 'Знаменатель',
+                        children: renderScheduleTable('zn'),
+                      },
+                    ]}
+                  />
+                </div>
               ) : (
                 <Empty description="Выберите группы для отображения расписания" />
               )}

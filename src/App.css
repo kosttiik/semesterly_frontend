@@ -130,52 +130,23 @@ body {
   cursor: help;
 }
 
-/* Dynamic discipline name behavior */
-.lesson-name .full-name,
+/* Dynamic discipline name behavior - base rules */
 .lesson-name-container .full-name {
   display: block;
 }
 
-.lesson-name .short-name,
 .lesson-name-container .short-name {
+  display: none;
+  cursor: help;
+}
+
+/* Manual toggle for name display */
+.use-short-names .lesson-name-container .full-name {
   display: none;
 }
 
-/* Mobile first - only apply short names on very small screens */
-@media (max-width: 576px) {
-  .lesson-name-container .full-name {
-    display: none;
-  }
-  .lesson-name-container .short-name[data-has-tooltip='true'] {
-    display: block;
-  }
-}
-
-/* For multiple groups, adjust based on count and screen size */
-@media (max-width: 1200px) {
-  .schedule-table[data-groups='3'] .lesson-name-container .full-name {
-    display: none;
-  }
-  .schedule-table[data-groups='3']
-    .lesson-name-container
-    .short-name[data-has-tooltip='true'] {
-    display: block;
-  }
-}
-
-@media (max-width: 1400px) {
-  .schedule-table[data-groups='4'] .lesson-name-container .full-name,
-  .schedule-table[data-groups='5'] .lesson-name-container .full-name {
-    display: none;
-  }
-  .schedule-table[data-groups='4']
-    .lesson-name-container
-    .short-name[data-has-tooltip='true'],
-  .schedule-table[data-groups='5']
-    .lesson-name-container
-    .short-name[data-has-tooltip='true'] {
-    display: block;
-  }
+.use-short-names .lesson-name-container .short-name {
+  display: block;
 }
 
 .lesson-type {
@@ -265,36 +236,4 @@ body {
 .ant-tooltip-inner b {
   display: block;
   margin-bottom: 4px;
-}
-
-/* Dynamic discipline name behavior */
-.lesson-name-container .full-name {
-  display: block;
-}
-
-.lesson-name-container .short-name {
-  display: none;
-}
-
-/* When space is constrained, show abbreviated name */
-@media (max-width: 768px) {
-  .lesson-name-container .full-name {
-    display: none;
-  }
-  .lesson-name-container .short-name {
-    display: block;
-  }
-}
-
-/* For multiple groups, show short names on smaller screens */
-.schedule-table[data-groups]:not([data-groups='1'])
-  .lesson-name-container
-  .full-name {
-  display: none;
-}
-
-.schedule-table[data-groups]:not([data-groups='1'])
-  .lesson-name-container
-  .short-name {
-  display: block;
 }
