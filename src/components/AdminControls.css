@@ -1,0 +1,47 @@
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.admin-control-alert {
+  animation: slideIn 0.3s ease;
+}
+
+.admin-control-progress {
+  animation: fadeIn 0.3s ease;
+}
+
+.ant-modal-enter {
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+.ant-modal-enter-active {
+  transform: translateY(0);
+  opacity: 1;
+  transition: all 0.3s ease-out;
+}
+
+.ant-modal-mask-enter {
+  opacity: 0;
+}
+
+.ant-modal-mask-enter-active {
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}

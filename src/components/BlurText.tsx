@@ -109,7 +109,7 @@ const BlurText: React.FC<BlurTextProps> = ({
   );
 
   return (
-    <p ref={ref} className={className}>
+    <p ref={ref} className={`breadcrumb-text ${className}`}>
       {springs.map((props, i) => (
         <animated.span
           key={i}
@@ -118,6 +118,7 @@ const BlurText: React.FC<BlurTextProps> = ({
             display: 'inline-block',
             willChange: 'transform, filter, opacity',
             fontSize: '36px',
+            color: '#007bff',
           }}
         >
           {elements[i]}

@@ -4,7 +4,7 @@ interface CacheItem<T> {
 }
 
 class CacheService {
-  private static EXPIRY_TIME = 1000 * 60 * 30; // 30 minutes
+  private static EXPIRY_TIME = 1000 * 60 * 30; // 30 минут
 
   static set<T>(key: string, data: T): void {
     const item: CacheItem<T> = {

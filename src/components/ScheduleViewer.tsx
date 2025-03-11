@@ -24,6 +24,7 @@ import {
   InfoCircleOutlined,
   CompressOutlined,
   ExpandOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import {
   ScheduleItem,
@@ -35,8 +36,10 @@ import {
 import { scheduleService } from '../services/scheduleService';
 import { parseTime } from '../utils/timeUtils';
 import dayjs from 'dayjs';
+import CacheService from '../services/cacheService';
+import AdminControls from './AdminControls';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 const DROPDOWN_ITEM_HEIGHT = 32; // height of each dropdown item in pixels
 
@@ -44,6 +47,8 @@ type CustomTagProps = Parameters<NonNullable<SelectProps['tagRender']>>[0];
 
 interface ScheduleViewerProps {
   initialGroupIds?: string[];
+  displayMode: 'separate' | 'combined';
+  setDisplayMode: (mode: 'separate' | 'combined') => void;
 }
 
 // Define ScheduleMap type for memoized data structure
@@ -86,6 +91,8 @@ const GROUP_COLORS = [
 
 const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   initialGroupIds = [],
+  displayMode,
+  setDisplayMode,
 }) => {
   // State management
   const [selectedGroups, setSelectedGroups] =
@@ -96,9 +103,10 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     'idle' | 'loading' | 'success' | 'error'
   >('idle');
   const [groups, setGroups] = useState<Group[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [useShortNames, setUseShortNames] = useState(false);
+  const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
   // Keep track of fetched schedules
   const fetchedSchedules = useRef<Set<string>>(new Set());
@@ -154,10 +162,17 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
   // Fetch groups
   const fetchGroups = useCallback(async () => {
+    console.log('Fetching groups...');
     setGroupsStatus('loading');
     setError(null);
+    setGroups([]);
+
+    // Clear groups cache specifically
+    CacheService.remove('groups');
+
     try {
       const fetchedGroups = await scheduleService.getAllGroups();
+
       if (fetchedGroups.length === 0) {
         setError('Нет доступных групп');
         setGroupsStatus('error');
@@ -165,7 +180,8 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       }
       setGroups(fetchedGroups);
       setGroupsStatus('success');
-    } catch {
+    } catch (err) {
+      console.error('Failed to fetch groups:', err);
       setError('Ошибка загрузки групп');
       setGroupsStatus('error');
       message.error('Не удалось загрузить список групп');
@@ -313,8 +329,135 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     return `${teacher.lastName} ${teacher.firstName[0]}.${teacher.middleName[0]}.`;
   };
 
+  // Add this helper function after existing interfaces
+  const WeekLabel: React.FC<{ isNumerator: boolean }> = ({ isNumerator }) => (
+    <Tag className="week-label" color={isNumerator ? 'blue' : 'green'}>
+      {isNumerator ? 'чс' : 'зн'}
+    </Tag>
+  );
+
+  // Update renderLessonContent for more compact layout
+  const renderLessonContent = (lesson: ScheduleItem) => {
+    if (!lesson) return null;
+
+    const discipline = lesson.disciplines[0];
+    const shortName = discipline?.abbr || discipline?.shortName;
+    const fullName = discipline?.fullName;
+
+    return (
+      <>
+        <div className="lesson-header">
+          <div className="lesson-name-container">
+            {discipline ? (
+              <>
+                <span className="full-name">{fullName || 'Нет названия'}</span>
+                <Tooltip
+                  title={fullName}
+                  mouseEnterDelay={0.5}
+                  mouseLeaveDelay={0.1}
+                  placement="topLeft"
+                >
+                  <span className="short-name">
+                    {shortName || fullName || 'Нет названия'}
+                  </span>
+                </Tooltip>
+                <div className="lesson-type">
+                  <Tag color={getActivityTypeColor(discipline.actType)}>
+                    {translateActivityType(discipline.actType)}
+                  </Tag>
+                </div>
+              </>
+            ) : (
+              <span>Нет названия</span>
+            )}
+          </div>
+          <div className="lesson-time">
+            {lesson.startTime}–{lesson.endTime}
+          </div>
+        </div>
+        <div className="lesson-location">
+          {lesson.audiences.map((a) => `${a.building} ${a.name}`).join(', ')}
+        </div>
+        <Tooltip
+          title={lesson.teachers.map(formatTeacherFullName).join('\n')}
+          mouseEnterDelay={0.5}
+          placement="topLeft"
+          overlayStyle={{ maxWidth: '100%', whiteSpace: 'pre-line' }}
+        >
+          <div className="lesson-teacher">
+            {lesson.teachers.map(formatTeacherInitials).join(', ')}
+          </div>
+        </Tooltip>
+      </>
+    );
+  };
+
+  const renderCombinedCell = (
+    groupId: string,
+    day: number,
+    timeSlot: TimeSlot
+  ) => {
+    const hasNumerator =
+      (scheduleMap.ch[day]?.[timeSlot.slot]?.[groupId] || []).length > 0;
+    const hasDenominator =
+      (scheduleMap.zn[day]?.[timeSlot.slot]?.[groupId] || []).length > 0;
+
+    if (!hasNumerator && !hasDenominator) return null;
+
+    return (
+      <div
+        className="combined-lesson-card"
+        style={{
+          borderLeft: `3px solid ${getGroupColor(groupId, selectedGroups)}`,
+        }}
+        data-group-color={getGroupColor(groupId, selectedGroups)}
+      >
+        {(['ch', 'zn'] as const).map((week) => {
+          const lessons =
+            scheduleMap[week][day]?.[timeSlot.slot]?.[groupId] || [];
+          const isNumerator = week === 'ch';
+
+          return (
+            <div
+              key={week}
+              className={`lesson-half ${
+                isNumerator ? 'numerator' : 'denominator'
+              }`}
+            >
+              {lessons.length > 0 && (
+                <>
+                  {renderLessonContent(lessons[0])}
+                  <WeekLabel isNumerator={isNumerator} />
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderLessonCard = (lesson: ScheduleItem, groupId: string) => {
+    if (!lesson) return null;
+
+    return (
+      <div
+        key={`${lesson.id}_${groupId}_${
+          lesson.disciplines[0]?.fullName
+        }_${lesson.teachers.map((t) => t.id).join('_')}`}
+        className="lesson-card"
+        style={{
+          borderLeft: `3px solid ${getGroupColor(groupId, selectedGroups)}`,
+          backgroundColor: `${getGroupColor(groupId, selectedGroups)}10`,
+        }}
+      >
+        {renderLessonContent(lesson)}
+      </div>
+    );
+  };
+
   // Render schedule table
-  const renderScheduleTable = (weekType: 'ch' | 'zn') => (
+  const renderScheduleTable = (weekType?: 'ch' | 'zn') => (
     <div className="schedule-table-container">
       <table
         className="schedule-table"
@@ -332,6 +475,12 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
               <th key={groupId} className="group-column" scope="col">
                 {groups.find((g) => g.uuid === groupId)?.name ||
                   'Неизвестная группа'}
+                <span
+                  className="group-color-dot"
+                  style={{
+                    backgroundColor: getGroupColor(groupId, selectedGroups),
+                  }}
+                />
               </th>
             ))}
           </tr>
@@ -359,110 +508,14 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                   </td>
                   {selectedGroups.map((groupId) => (
                     <td key={groupId} className="schedule-cell">
-                      {(
-                        scheduleMap[weekType][day.id]?.[timeSlot.slot]?.[
-                          groupId
-                        ] || []
-                      ).map((lesson) => (
-                        <div
-                          key={`${lesson.id}_${groupId}_${
-                            lesson.disciplines[0]?.fullName
-                          }_${lesson.teachers.map((t) => t.id).join('_')}`}
-                          className="lesson-card"
-                          style={{
-                            borderLeft: `3px solid ${getGroupColor(
-                              groupId,
-                              selectedGroups
-                            )}`,
-                            backgroundColor: `${getGroupColor(
-                              groupId,
-                              selectedGroups
-                            )}10`,
-                          }}
-                        >
-                          <div className="lesson-header">
-                            <div className="lesson-name-container">
-                              {lesson.disciplines[0] ? (
-                                <>
-                                  <span className="full-name">
-                                    {lesson.disciplines[0].fullName ||
-                                      lesson.disciplines[0].abbr ||
-                                      'Нет названия'}
-                                  </span>
-                                  <Tooltip
-                                    title={
-                                      <div style={{ textAlign: 'left' }}>
-                                        <b>
-                                          {lesson.disciplines[0].fullName ||
-                                            lesson.disciplines[0].abbr ||
-                                            'Нет названия'}
-                                        </b>
-                                      </div>
-                                    }
-                                    placement="topLeft"
-                                    mouseEnterDelay={0.2}
-                                    mouseLeaveDelay={0.1}
-                                  >
-                                    <span className="short-name">
-                                      {(lesson.disciplines[0].abbr !==
-                                        lesson.disciplines[0].fullName &&
-                                        lesson.disciplines[0].abbr) ||
-                                        lesson.disciplines[0].fullName ||
-                                        'Нет названия'}
-                                    </span>
-                                  </Tooltip>
-                                </>
-                              ) : (
-                                <span className="full-name">Нет названия</span>
-                              )}
-                            </div>
-                            <div className="lesson-time">
-                              {lesson.startTime}–{lesson.endTime}
-                            </div>
-                          </div>
-                          <div className="lesson-type">
-                            <Tag
-                              color={getActivityTypeColor(
-                                lesson.disciplines[0]?.actType
-                              )}
-                            >
-                              {translateActivityType(
-                                lesson.disciplines[0]?.actType
-                              )}
-                            </Tag>
-                          </div>
-                          <div className="lesson-location">
-                            {lesson.audiences
-                              .map((a) => `${a.building} ${a.name}`)
-                              .join(', ')}
-                          </div>
-                          <div className="lesson-teacher">
-                            <Tooltip
-                              title={
-                                <div style={{ textAlign: 'left' }}>
-                                  {lesson.teachers.map((t, i) => (
-                                    <div key={t.id}>
-                                      {formatTeacherFullName(t)}
-                                      {i < lesson.teachers.length - 1 ? (
-                                        <br />
-                                      ) : null}
-                                    </div>
-                                  ))}
-                                </div>
-                              }
-                              placement="bottom"
-                              mouseEnterDelay={0.2} // Slightly slower tooltip appearance
-                              mouseLeaveDelay={0.1}
-                            >
-                              <span>
-                                {lesson.teachers
-                                  .map(formatTeacherInitials)
-                                  .join(', ')}
-                              </span>
-                            </Tooltip>
-                          </div>
-                        </div>
-                      ))}
+                      {displayMode === 'combined'
+                        ? renderCombinedCell(groupId, day.id, timeSlot)
+                        : weekType &&
+                          (
+                            scheduleMap[weekType][day.id]?.[timeSlot.slot]?.[
+                              groupId
+                            ] || []
+                          ).map((lesson) => renderLessonCard(lesson, groupId))}
                     </td>
                   ))}
                 </tr>
@@ -476,190 +529,224 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
   return (
     <div className="schedule-viewer">
-      <Card>
-        {groupsStatus === 'loading' ? (
-          <Spin tip="Загрузка групп...">
-            <div style={{ padding: 50, textAlign: 'center' }} />
-          </Spin>
-        ) : error ? (
-          <Empty
-            description={
-              <>
-                <Text type="danger">{error}</Text>
+      <AdminControls
+        isModalOpen={isAdminModalOpen}
+        onModalOpen={() => setIsAdminModalOpen(true)}
+        onModalClose={() => setIsAdminModalOpen(false)}
+      />
+      <Card className="schedule-controls-card">
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Space
+            style={{
+              width: '100%',
+              justifyContent: 'space-between',
+              backgroundColor: '#f5f5f5',
+              padding: '12px',
+              borderRadius: '6px',
+            }}
+          >
+            <Space>
+              <Button
+                icon={<SettingOutlined />}
+                type="primary"
+                onClick={() => setIsAdminModalOpen(true)}
+                style={{ fontWeight: 500 }}
+              >
+                Панель управления
+              </Button>
+              <Space.Compact>
                 <Button
-                  type="primary"
-                  onClick={fetchGroups}
-                  style={{ marginTop: 16 }}
+                  type="default"
+                  onClick={() => setDisplayMode('separate')}
+                  style={{
+                    backgroundColor:
+                      displayMode === 'separate' ? '#e6f4ff' : undefined,
+                    borderColor:
+                      displayMode === 'separate' ? '#91caff' : undefined,
+                    color: displayMode === 'separate' ? '#0958d9' : undefined,
+                  }}
                 >
-                  Повторить попытку
+                  Раздельный вид
                 </Button>
-              </>
-            }
-          />
-        ) : groupsStatus !== 'success' ? (
-          <Spin tip="Загрузка групп...">
-            <div style={{ padding: 50, textAlign: 'center' }} />
-          </Spin>
-        ) : (
-          <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            <Card>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <Space
-                  style={{ width: '100%', justifyContent: 'space-between' }}
-                >
-                  <Space align="center">
-                    <Space>
-                      <Title level={4} style={{ margin: 0, marginTop: -4 }}>
-                        Расписание занятий
-                      </Title>
-                      <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
-                        <InfoCircleOutlined
-                          style={{ fontSize: '16px', color: '#1677ff' }}
-                        />
-                      </Tooltip>
-                    </Space>
-                    <Button
-                      icon={
-                        useShortNames ? (
-                          <ExpandOutlined />
-                        ) : (
-                          <CompressOutlined />
-                        )
-                      }
-                      onClick={() => setUseShortNames(!useShortNames)}
-                      size="small"
-                    >
-                      {useShortNames
-                        ? 'Полные названия'
-                        : 'Сокращённые названия'}
-                    </Button>
-                  </Space>
-                  <Button
-                    icon={<ReloadOutlined />}
-                    onClick={() => fetchScheduleData(true)}
-                    disabled={selectedGroups.length === 0}
-                  >
-                    Обновить
-                  </Button>
-                </Space>
-                <Select
-                  mode="multiple"
-                  style={{ width: '100%' }}
-                  placeholder="Выберите группы"
-                  value={selectedGroups}
-                  onChange={handleGroupChange}
-                  loading={loading}
-                  showSearch
-                  searchValue={searchTerm}
-                  onSearch={setSearchTerm}
-                  filterOption={(input, option) =>
-                    (option?.label as string)
-                      ?.toLowerCase()
-                      .includes(input.toLowerCase())
-                  }
-                  onSelect={() => {
-                    setTimeout(() => {
-                      const selectInput = document.querySelector(
-                        '.ant-select-selection-search-input'
-                      ) as HTMLInputElement;
-                      if (selectInput) {
-                        selectInput.value = searchTerm;
-                      }
-                    }, 0);
+                <Button
+                  type="default"
+                  onClick={() => setDisplayMode('combined')}
+                  style={{
+                    backgroundColor:
+                      displayMode === 'combined' ? '#e6f4ff' : undefined,
+                    borderColor:
+                      displayMode === 'combined' ? '#91caff' : undefined,
+                    color: displayMode === 'combined' ? '#0958d9' : undefined,
                   }}
-                  virtual={true}
-                  listHeight={256}
-                  optionLabelProp="label"
-                  dropdownRender={(menu) => (
-                    <div>
-                      <div
-                        style={{
-                          padding: '8px 12px',
-                          borderBottom: '1px solid #f0f0f0',
-                          fontWeight: 500,
-                          color: '#666',
-                        }}
-                      >
-                        Количество групп: {groups.length}
-                      </div>
-                      {menu}
-                    </div>
-                  )}
-                  options={groups.map((g, index) => ({
-                    label: g.name,
-                    value: g.uuid,
-                    children: (
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          height: DROPDOWN_ITEM_HEIGHT,
-                          alignItems: 'center',
-                          padding: '0 8px',
-                        }}
-                      >
-                        <span>{g.name}</span>
-                        <span style={{ color: '#8c8c8c' }}>#{index + 1}</span>
-                      </div>
-                    ),
-                  }))}
-                  tagRender={(props: CustomTagProps) => {
-                    const { label, value, closable, onClose } = props;
-
-                    if (!value || typeof value !== 'string') return <></>;
-
-                    const index = selectedGroups.indexOf(value);
-                    const color = GROUP_COLORS[index % GROUP_COLORS.length];
-
-                    return (
-                      <Tag
-                        color={color}
-                        closable={closable}
-                        onClose={onClose}
-                        style={{
-                          margin: '2px',
-                          color: '#fff',
-                          fontWeight: 500,
-                        }}
-                      >
-                        {label}
-                      </Tag>
-                    );
-                  }}
-                />
-              </Space>
-            </Card>
-            <Spin spinning={loading}>
-              {selectedGroups.length > 0 ? (
-                <div
-                  className={`schedule-container ${
-                    useShortNames ? 'use-short-names' : ''
-                  }`}
                 >
-                  <Tabs
-                    defaultActiveKey="numerator"
-                    type="card"
-                    items={[
-                      {
-                        key: 'numerator',
-                        label: 'Числитель',
-                        children: renderScheduleTable('ch'),
-                      },
-                      {
-                        key: 'denominator',
-                        label: 'Знаменатель',
-                        children: renderScheduleTable('zn'),
-                      },
-                    ]}
-                  />
-                </div>
-              ) : (
-                <Empty description="Выберите группы для отображения расписания" />
-              )}
-            </Spin>
+                  Объединённый вид
+                </Button>
+              </Space.Compact>
+              <Button
+                icon={useShortNames ? <ExpandOutlined /> : <CompressOutlined />}
+                onClick={() => setUseShortNames(!useShortNames)}
+              >
+                {useShortNames ? 'Полные названия' : 'Сокращённые названия'}
+              </Button>
+            </Space>
+            <Space>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => fetchScheduleData(true)}
+                disabled={selectedGroups.length === 0}
+              >
+                Обновить
+              </Button>
+            </Space>
           </Space>
-        )}
+
+          <Space direction="vertical" style={{ width: '100%' }}>
+            <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+              <Space align="center">
+                <Title level={4} style={{ margin: 0, paddingBottom: 4 }}>
+                  Расписание занятий
+                </Title>
+                <Tooltip title="Вы можете выбрать несколько групп для отображения их общего расписания">
+                  <InfoCircleOutlined
+                    style={{ fontSize: '16px', color: '#1677ff' }}
+                  />
+                </Tooltip>
+              </Space>
+            </Space>
+
+            <Select
+              mode="multiple"
+              style={{ width: '100%' }}
+              placeholder="Выберите группы"
+              value={selectedGroups}
+              onChange={handleGroupChange}
+              loading={loading}
+              showSearch
+              searchValue={searchTerm}
+              onSearch={setSearchTerm}
+              notFoundContent="Ничего не нашлось"
+              filterOption={(input, option) =>
+                (option?.label as string)
+                  ?.toLowerCase()
+                  .includes(input.toLowerCase())
+              }
+              onSelect={() => {
+                setTimeout(() => {
+                  const selectInput = document.querySelector(
+                    '.ant-select-selection-search-input'
+                  ) as HTMLInputElement;
+                  if (selectInput) {
+                    selectInput.value = searchTerm;
+                  }
+                }, 0);
+              }}
+              virtual={true}
+              listHeight={256}
+              optionLabelProp="label"
+              dropdownRender={(menu) => (
+                <div>
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      borderBottom: '1px solid #f0f0f0',
+                      fontWeight: 500,
+                      color: '#666',
+                    }}
+                  >
+                    Количество групп: {groups.length}
+                  </div>
+                  {menu}
+                </div>
+              )}
+              options={groups.map((g, index) => ({
+                label: g.name,
+                value: g.uuid,
+                children: (
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      height: DROPDOWN_ITEM_HEIGHT,
+                      alignItems: 'center',
+                      padding: '0 8px',
+                    }}
+                  >
+                    <span>{g.name}</span>
+                    <span style={{ color: '#8c8c8c' }}>#{index + 1}</span>
+                  </div>
+                ),
+              }))}
+              tagRender={(props: CustomTagProps) => {
+                const { label, value, closable, onClose } = props;
+
+                if (!value || typeof value !== 'string') return <></>;
+
+                const index = selectedGroups.indexOf(value);
+                const color = GROUP_COLORS[index % GROUP_COLORS.length];
+
+                return (
+                  <Tag
+                    color={color}
+                    closable={closable}
+                    onClose={onClose}
+                    style={{
+                      margin: '2px',
+                      color: '#fff',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {label}
+                  </Tag>
+                );
+              }}
+            />
+          </Space>
+        </Space>
       </Card>
+      <Spin spinning={loading}>
+        {selectedGroups.length > 0 ? (
+          <div
+            className={`schedule-container ${
+              useShortNames ? 'use-short-names' : ''
+            }`}
+          >
+            {displayMode === 'separate' ? (
+              <Tabs
+                defaultActiveKey="numerator"
+                type="card"
+                items={[
+                  {
+                    key: 'numerator',
+                    label: 'Числитель',
+                    children: renderScheduleTable('ch'),
+                  },
+                  {
+                    key: 'denominator',
+                    label: 'Знаменатель',
+                    children: renderScheduleTable('zn'),
+                  },
+                ]}
+                style={{
+                  marginBottom: '-1px', // Remove gap between tabs and table
+                  backgroundColor: '#fff',
+                  borderTopLeftRadius: '8px',
+                  borderTopRightRadius: '8px',
+                }}
+                tabBarStyle={{
+                  padding: '8px 8px 0',
+                  marginBottom: 0,
+                  justifyContent: 'flex-start',
+                }}
+                className="week-tabs"
+              />
+            ) : (
+              renderScheduleTable()
+            )}
+          </div>
+        ) : (
+          <Empty description="Выберите группы для отображения расписания" />
+        )}
+      </Spin>
     </div>
   );
 };
