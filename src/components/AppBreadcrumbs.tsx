@@ -1,24 +1,25 @@
 import React from 'react';
 import { Breadcrumb } from 'antd';
 import { TeamOutlined, UserOutlined } from '@ant-design/icons';
+import { useNavigate, useLocation } from 'react-router-dom';
 
-interface AppBreadcrumbsProps {
-  currentView: 'groups' | 'teachers';
-  onViewChange: (view: 'groups' | 'teachers') => void;
-}
+const AppBreadcrumbs: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentView = location.pathname.split('/')[1] || 'groups';
 
-const AppBreadcrumbs: React.FC<AppBreadcrumbsProps> = ({
-  currentView,
-  onViewChange,
-}) => {
   const handleKeyDown = (
     event: React.KeyboardEvent,
     view: 'groups' | 'teachers'
   ) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      onViewChange(view);
+      navigate(`/${view}`);
     }
+  };
+
+  const handleViewChange = (view: 'groups' | 'teachers') => {
+    navigate(`/${view}`);
   };
 
   return (
@@ -36,7 +37,7 @@ const AppBreadcrumbs: React.FC<AppBreadcrumbsProps> = ({
             </span>
           ),
           className: currentView === 'groups' ? 'breadcrumb-active' : '',
-          onClick: () => onViewChange('groups'),
+          onClick: () => handleViewChange('groups'),
         },
         {
           title: (
@@ -50,7 +51,7 @@ const AppBreadcrumbs: React.FC<AppBreadcrumbsProps> = ({
             </span>
           ),
           className: currentView === 'teachers' ? 'breadcrumb-active' : '',
-          onClick: () => onViewChange('teachers'),
+          onClick: () => handleViewChange('teachers'),
         },
       ]}
       style={{
