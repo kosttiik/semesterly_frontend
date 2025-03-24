@@ -26,27 +26,40 @@ import { DAYS, TIME_SLOTS } from '../utils/constants';
 
 const { Title } = Typography;
 
-// Add utility function
-const getActivityTypeColor = (actType: string = ''): string => {
-  const types: Record<string, string> = {
+// Activity type colors
+const getActivityTypeColor = (actType: string): string =>
+  ({
+    // Russian variants
     лекция: 'blue',
     'лаб. работа': 'purple',
     'практ. работа': 'green',
     семинар: 'orange',
     зачёт: 'gold',
     экзамен: 'red',
+    // English variants - map to same colors
     lecture: 'blue',
     laboratory: 'purple',
     practice: 'green',
     seminar: 'orange',
     credit: 'gold',
     exam: 'red',
+    // Handle full forms too
     лабораторная: 'purple',
     практика: 'green',
-    зачет: 'gold',
-  };
-  return types[actType.toLowerCase()] || 'default';
-};
+    зачет: 'gold', // Handle both with and without ё
+  }[actType.toLowerCase()] || 'default');
+
+// Add translation function
+const translateActivityType = (actType: string): string =>
+  ({
+    lecture: 'лекция',
+    lab: 'лаб. работа',
+    practice: 'практ. работа',
+    seminar: 'семинар',
+    credit: 'зачёт',
+    exam: 'экзамен',
+    // Add any other translations needed
+  }[actType.toLowerCase()] || actType);
 
 interface TeacherScheduleViewerProps {
   displayMode: 'separate' | 'combined';
@@ -225,7 +238,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                 </Tooltip>
                 <div className="lesson-type">
                   <Tag color={getActivityTypeColor(discipline.actType)}>
-                    {discipline.actType}
+                    {translateActivityType(discipline.actType)}
                   </Tag>
                 </div>
               </>
