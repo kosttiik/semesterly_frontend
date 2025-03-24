@@ -358,7 +358,12 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
           title={lesson.teachers.map(formatTeacherFullName).join('\n')}
           mouseEnterDelay={0.1}
           placement="topLeft"
-          overlayStyle={{ maxWidth: '100%', whiteSpace: 'pre-line' }}
+          styles={{
+            root: {
+              maxWidth: '100%',
+              whiteSpace: 'pre-line',
+            },
+          }}
         >
           <div className="lesson-teacher">
             {lesson.teachers.map(formatTeacherInitials).join(', ')}

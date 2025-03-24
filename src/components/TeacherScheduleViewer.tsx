@@ -228,8 +228,8 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                 <span className="full-name">{fullName || 'Нет названия'}</span>
                 <Tooltip
                   title={fullName}
-                  mouseEnterDelay={0.5}
-                  mouseLeaveDelay={0.1}
+                  mouseEnterDelay={0.1}
+                  mouseLeaveDelay={0.15}
                   placement="topLeft"
                 >
                   <span className="short-name">
@@ -250,17 +250,29 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
             {lesson.startTime}–{lesson.endTime}
           </div>
         </div>
-        <Tooltip
-          title={lesson.groups.map((g) => g.name).join('\n')}
-          mouseEnterDelay={0.5}
-          placement="topLeft"
-          overlayStyle={{ maxWidth: '100%', whiteSpace: 'pre-line' }}
-        >
-          <div className="lesson-groups">
-            {lesson.groups.length}{' '}
-            {lesson.groups.length === 1 ? 'группа' : 'групп(ы)'}
+        {lesson.groups.length === 1 ? (
+          <div
+            className="lesson-groups"
+            style={{ color: '#000', cursor: 'default' }}
+          >
+            {lesson.groups[0].name}
           </div>
-        </Tooltip>
+        ) : (
+          <Tooltip
+            title={lesson.groups.map((g) => g.name).join('\n')}
+            mouseEnterDelay={0.1}
+            mouseLeaveDelay={0.15}
+            placement="topLeft"
+            styles={{
+              root: {
+                maxWidth: '100%',
+                whiteSpace: 'pre-line',
+              },
+            }}
+          >
+            <div className="lesson-groups">{lesson.groups.length} групп(ы)</div>
+          </Tooltip>
+        )}
         <div className="lesson-location">
           {lesson.audiences.map((a) => `${a.building} ${a.name}`).join(', ')}
         </div>
