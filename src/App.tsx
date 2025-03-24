@@ -7,6 +7,7 @@ import {
   Navigate,
 } from 'react-router-dom';
 import ScheduleViewer from './components/ScheduleViewer';
+import TeacherScheduleViewer from './components/TeacherScheduleViewer';
 import CurrentWeekIndicator from './components/CurrentWeekIndicator';
 import BlurText from './components/BlurText';
 import AppBreadcrumbs from './components/AppBreadcrumbs';
@@ -110,14 +111,10 @@ const App: React.FC = () => {
                 <Route
                   path="/teachers"
                   element={
-                    <div style={{ textAlign: 'center', margin: '48px 0' }}>
-                      <Alert
-                        message="В разработке"
-                        description="Функционал просмотра расписания преподавателей находится в разработке"
-                        type="info"
-                        showIcon
-                      />
-                    </div>
+                    <TeacherScheduleViewer
+                      displayMode={displayMode}
+                      setDisplayMode={setDisplayMode}
+                    />
                   }
                 />
               </Routes>

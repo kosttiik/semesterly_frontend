@@ -353,8 +353,8 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                 <span className="full-name">{fullName || 'Нет названия'}</span>
                 <Tooltip
                   title={fullName}
-                  mouseEnterDelay={0.5}
-                  mouseLeaveDelay={0.1}
+                  mouseEnterDelay={0.1}
+                  mouseLeaveDelay={0.15}
                   placement="topLeft"
                 >
                   <span className="short-name">
@@ -380,7 +380,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         </div>
         <Tooltip
           title={lesson.teachers.map(formatTeacherFullName).join('\n')}
-          mouseEnterDelay={0.5}
+          mouseEnterDelay={0.1}
           placement="topLeft"
           overlayStyle={{ maxWidth: '100%', whiteSpace: 'pre-line' }}
         >

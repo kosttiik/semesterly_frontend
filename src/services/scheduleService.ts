@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { ScheduleItem, Group } from '../types/schedule';
+import { ScheduleItem, Group, Teacher } from '../types/schedule';
 import CacheService from './cacheService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
@@ -77,6 +77,35 @@ class ScheduleService {
     this.scheduleCache.set(uuid, schedule);
     CacheService.set(cacheKey, schedule);
 
+    return schedule;
+  }
+
+  async getAllTeachers(): Promise<Teacher[]> {
+    const cachedTeachers = CacheService.get<Teacher[]>('teachers');
+    if (cachedTeachers) {
+      return cachedTeachers;
+    }
+
+    const { data } = await this.api.get<Teacher[]>('/get-teachers');
+    const teachers = Array.isArray(data) ? data : [];
+
+    CacheService.set('teachers', teachers);
+    return teachers;
+  }
+
+  async getTeacherSchedule(uuid: string): Promise<ScheduleItem[]> {
+    const cacheKey = `teacher_schedule_${uuid}`;
+    const cachedSchedule = CacheService.get<ScheduleItem[]>(cacheKey);
+    if (cachedSchedule) {
+      return cachedSchedule;
+    }
+
+    const { data } = await this.api.get<ScheduleItem[]>(
+      `/get-teacher-schedule/${uuid}`
+    );
+    const schedule = data || [];
+
+    CacheService.set(cacheKey, schedule);
     return schedule;
   }
 
