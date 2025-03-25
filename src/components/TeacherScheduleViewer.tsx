@@ -26,30 +26,30 @@ import { DAYS, TIME_SLOTS } from '../utils/constants';
 
 const { Title } = Typography;
 
-// Activity type colors
+// Цвета для типов занятий
 const getActivityTypeColor = (actType: string): string =>
   ({
-    // Russian variants
+    // Русские варианты
     лекция: 'blue',
     'лаб. работа': 'purple',
     'практ. работа': 'green',
     семинар: 'orange',
     зачёт: 'gold',
     экзамен: 'red',
-    // English variants - map to same colors
+    // Английские варианты
     lecture: 'blue',
     laboratory: 'purple',
     practice: 'green',
     seminar: 'orange',
     credit: 'gold',
     exam: 'red',
-    // Handle full forms too
+    // Полные формы
     лабораторная: 'purple',
     практика: 'green',
-    зачет: 'gold', // Handle both with and without ё
+    зачет: 'gold', // Вариант без буквы ё
   }[actType.toLowerCase()] || 'default');
 
-// Add translation function
+// Функция перевода типов занятий
 const translateActivityType = (actType: string): string =>
   ({
     lecture: 'лекция',
@@ -58,7 +58,6 @@ const translateActivityType = (actType: string): string =>
     seminar: 'семинар',
     credit: 'зачёт',
     exam: 'экзамен',
-    // Add any other translations needed
   }[actType.toLowerCase()] || actType);
 
 interface TeacherScheduleViewerProps {

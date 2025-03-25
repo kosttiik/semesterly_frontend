@@ -13,6 +13,7 @@ import BlurText from './components/BlurText';
 import AppBreadcrumbs from './components/AppBreadcrumbs';
 import './App.css';
 
+// Компонент для обработки ошибок в приложении
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; error: Error | null }
@@ -27,16 +28,16 @@ class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error);
-    console.error('Error info:', errorInfo);
+    console.error('Поймана ошибка:', error);
+    console.error('Информация об ошибке:', errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <Alert
-          message="Error"
-          description={this.state.error?.message || 'Something went wrong'}
+          message="Ошибка"
+          description={this.state.error?.message || 'Что-то пошло не так'}
           type="error"
           showIcon
           action={
@@ -54,6 +55,7 @@ class ErrorBoundary extends React.Component<
 
 const { Header, Content, Footer } = Layout;
 
+// Мемоизация компонентов для оптимизации производительности
 const CurrentWeekIndicatorMemo = memo(CurrentWeekIndicator);
 const ScheduleViewerMemo = memo(ScheduleViewer);
 
