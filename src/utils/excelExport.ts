@@ -335,6 +335,158 @@ export async function generateExcelWorkbook(
   return workbook;
 }
 
+export async function generateTeacherExcelWorkbook(
+  teacherName: string,
+  scheduleMap: {
+    ch: { [day: number]: { [slot: number]: ScheduleItem[] } };
+    zn: { [day: number]: { [slot: number]: ScheduleItem[] } };
+    [key: string]: { [day: number]: { [slot: number]: ScheduleItem[] } };
+  },
+  groups: Group[]
+): Promise<ExcelJS.Workbook> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Semesterly';
+  workbook.lastModifiedBy = 'Semesterly';
+
+  const worksheet = workbook.addWorksheet('Расписание', {
+    views: [{ state: 'frozen', ySplit: 2 }],
+    properties: { defaultRowHeight: 40 },
+  });
+
+  worksheet.pageSetup.orientation = 'portrait';
+  worksheet.pageSetup.fitToPage = true;
+  worksheet.pageSetup.fitToWidth = 1;
+  worksheet.pageSetup.fitToHeight = 1;
+  worksheet.pageSetup.paperSize = 9;
+  worksheet.pageSetup.scale = 100;
+  worksheet.pageSetup.margins = {
+    left: 0.1,
+    right: 0.1,
+    top: 0.1,
+    bottom: 0.1,
+    header: 0,
+    footer: 0,
+  };
+
+  // Заголовок
+  worksheet.mergeCells('A1', 'G1');
+  const titleCell = worksheet.getCell('A1');
+  titleCell.value = `Расписание преподавателя: ${teacherName}`;
+  titleCell.font = { size: 14, bold: true };
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  worksheet.getRow(1).height = 28;
+
+  // Шапка таблицы
+  const headers = [
+    { name: 'День', width: 12 },
+    { name: 'Время', width: 13 },
+    { name: 'Неделя', width: 9 },
+    { name: 'Дисциплина', width: 32 },
+    { name: 'Тип', width: 12 },
+    { name: 'Группы', width: 22 },
+    { name: 'Аудитория', width: 18 },
+  ];
+  worksheet.columns = headers.map((h) => ({
+    width: h.width,
+    style: {
+      alignment: { wrapText: true, vertical: 'middle', horizontal: 'center' },
+    },
+  }));
+
+  const headerRow = worksheet.addRow(headers.map((h) => h.name));
+  headerRow.font = { bold: true, size: 10 };
+  headerRow.alignment = {
+    vertical: 'middle',
+    horizontal: 'center',
+    wrapText: true,
+  };
+  headerRow.height = 22;
+  headerRow.eachCell((cell) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF5F5F5' },
+    };
+    cell.border = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' },
+    };
+  });
+
+  // Сбор данных для строк
+  const weekTypes = [
+    { key: 'ch', label: 'ЧС', color: 'FFe6f7ff' },
+    { key: 'zn', label: 'ЗН', color: 'FFf6ffed' },
+  ];
+
+  for (const day of DAYS) {
+    for (const slot of TIME_SLOTS) {
+      for (const week of weekTypes) {
+        const lessons: ScheduleItem[] =
+          scheduleMap[week.key as 'ch' | 'zn'][day.id]?.[slot.slot] || [];
+        for (const lesson of lessons) {
+          const discipline = lesson.disciplines[0];
+          const groupNames = lesson.groups
+            .map((g) => groups.find((gr) => gr.uuid === g.uuid)?.name || g.name)
+            .join(', ');
+          const location = lesson.audiences
+            .map((a) => `${a.building}-${a.name}`)
+            .join(', ');
+          worksheet.addRow([
+            day.name,
+            slot.time,
+            week.label,
+            discipline?.fullName || 'Нет названия',
+            translateActivityType(discipline?.actType || 'н/д'),
+            groupNames,
+            location,
+          ]);
+        }
+      }
+    }
+  }
+
+  // Стилизация строк
+  for (let i = 3; i <= worksheet.rowCount; i++) {
+    const row = worksheet.getRow(i);
+    row.height = 22;
+    row.eachCell((cell, col) => {
+      cell.font = { size: 9 };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: col === 4 ? 'left' : 'center',
+        wrapText: true,
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+      // Цвет фона для недели
+      if (col === 3) {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: {
+            argb: row.getCell(3).value === 'ЧС' ? 'FFe6f7ff' : 'FFf6ffed',
+          },
+        };
+      }
+    });
+  }
+
+  // Область печати
+  worksheet.pageSetup.printArea = `A1:G${worksheet.rowCount}`;
+
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  return workbook;
+}
+
 export async function downloadExcel(
   workbook: ExcelJS.Workbook,
   filename: string

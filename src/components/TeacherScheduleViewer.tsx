@@ -18,11 +18,17 @@ import {
   CompressOutlined,
   ExpandOutlined,
   SettingOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
-import { ScheduleItem, Teacher } from '../types/schedule';
+import { ScheduleItem, Teacher, Group } from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import AdminControls from './AdminControls';
 import { DAYS, TIME_SLOTS } from '../utils/constants';
+import {
+  generateTeacherExcelWorkbook,
+  downloadExcel,
+} from '../utils/excelExport';
+import dayjs from 'dayjs';
 import '../App.css';
 
 const { Title } = Typography;
@@ -73,6 +79,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [useShortNames, setUseShortNames] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [groups, setGroups] = useState<Group[]>([]);
 
   const getLessonKey = (item: ScheduleItem): string => {
     return [
@@ -172,6 +179,14 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
       fetchTeacherSchedule(selectedTeacher);
     }
   }, [selectedTeacher, fetchTeacherSchedule]);
+
+  // Загрузка всех групп для отображения их названий в экспорте
+  useEffect(() => {
+    scheduleService
+      .getAllGroups()
+      .then(setGroups)
+      .catch(() => {});
+  }, []);
 
   const filterTeacher = (
     input: string,
@@ -406,17 +421,17 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                   {displayMode === 'combined'
                     ? renderCombinedCell(day.id, timeSlot.slot)
                     : weekType &&
-                      organizedSchedule[weekType][day.id]?.[timeSlot.slot]?.map(
-                        (lesson, idx) => (
-                          <React.Fragment
-                            key={`${weekType}-${day.id}-${
-                              timeSlot.slot
-                            }-${idx}-${lesson.id || 'noid'}`}
-                          >
-                            {renderLessonContent(lesson)}
-                          </React.Fragment>
-                        )
-                      )}
+                      organizedSchedule[weekType as 'ch' | 'zn'][day.id]?.[
+                        timeSlot.slot
+                      ]?.map((lesson, idx) => (
+                        <React.Fragment
+                          key={`${weekType}-${day.id}-${timeSlot.slot}-${idx}-${
+                            lesson.id || 'noid'
+                          }`}
+                        >
+                          {renderLessonContent(lesson)}
+                        </React.Fragment>
+                      ))}
                 </td>
               ))}
             </tr>
@@ -484,6 +499,54 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
     </Tag>
   );
 
+  const teacherScheduleMap = useMemo(() => {
+    type WeekType = 'ch' | 'zn';
+    const map: Record<
+      WeekType,
+      { [day: number]: { [slot: number]: ScheduleItem[] } }
+    > = { ch: {}, zn: {} };
+    (['ch', 'zn'] as WeekType[]).forEach((weekType) => {
+      map[weekType] = {};
+      DAYS.forEach((day) => {
+        map[weekType][day.id] = {};
+        TIME_SLOTS.forEach((slot) => {
+          map[weekType][day.id][slot.slot] =
+            organizedSchedule[weekType][day.id]?.[slot.slot] || [];
+        });
+      });
+    });
+    return map;
+  }, [organizedSchedule]);
+
+  // Экспорт в Excel
+  const handleExportToExcel = useCallback(async () => {
+    if (!selectedTeacher) {
+      message.warning('Выберите преподавателя для экспорта');
+      return;
+    }
+    try {
+      const teacherObj = teachers.find((t) => t.uuid === selectedTeacher);
+      const teacherName = teacherObj
+        ? `${teacherObj.lastName} ${teacherObj.firstName} ${teacherObj.middleName}`.replace(
+            /\s+/g,
+            ' '
+          )
+        : 'Преподаватель';
+      const wb = await generateTeacherExcelWorkbook(
+        teacherName,
+        teacherScheduleMap,
+        groups
+      );
+      const timestamp = dayjs().format('DD-MM-YYYY');
+      const filename = `Расписание_${teacherName}_${timestamp}.xlsx`;
+      await downloadExcel(wb, filename);
+      message.success('Расписание успешно экспортировано');
+    } catch (error) {
+      console.error('Export failed:', error);
+      message.error('Не удалось экспортировать расписание');
+    }
+  }, [selectedTeacher, teachers, teacherScheduleMap, groups]);
+
   return (
     <div className="teacher-schedule-viewer-root">
       <AdminControls
@@ -536,6 +599,13 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                 onClick={() => setUseShortNames(!useShortNames)}
               >
                 {useShortNames ? 'Полные названия' : 'Сокращённые названия'}
+              </Button>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={handleExportToExcel}
+                disabled={!selectedTeacher}
+              >
+                Экспорт в Excel
               </Button>
             </Space>
             <Button
