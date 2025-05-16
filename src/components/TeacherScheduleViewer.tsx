@@ -23,30 +23,28 @@ import { ScheduleItem, Teacher } from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import AdminControls from './AdminControls';
 import { DAYS, TIME_SLOTS } from '../utils/constants';
+import '../App.css';
 
 const { Title } = Typography;
 
 // Цвета для типов занятий
 const getActivityTypeColor = (actType: string): string =>
   ({
-    // Русские варианты
     лекция: 'blue',
     'лаб. работа': 'purple',
     'практ. работа': 'green',
     семинар: 'orange',
     зачёт: 'gold',
     экзамен: 'red',
-    // Английские варианты
     lecture: 'blue',
     laboratory: 'purple',
     practice: 'green',
     seminar: 'orange',
     credit: 'gold',
     exam: 'red',
-    // Полные формы
     лабораторная: 'purple',
     практика: 'green',
-    зачет: 'gold', // Вариант без буквы ё
+    зачет: 'gold',
   }[actType.toLowerCase()] || 'default');
 
 // Функция перевода типов занятий
@@ -73,11 +71,9 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [searchTerm, setSearchTerm] = useState<string>('');
   const [useShortNames, setUseShortNames] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
 
-  // Add this helper function after the existing TeacherScheduleViewer interface
   const getLessonKey = (item: ScheduleItem): string => {
     return [
       item.day,
@@ -90,7 +86,6 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
     ].join('_');
   };
 
-  // Replace the existing organizedSchedule useMemo with this updated version
   const organizedSchedule = useMemo(() => {
     const organized: Record<
       string,
@@ -100,19 +95,16 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
       zn: {},
     };
 
-    // First, deduplicate lessons using a Map
     const uniqueLessons = new Map<string, ScheduleItem>();
 
     scheduleData.forEach((item) => {
       const key = getLessonKey(item);
       if (!uniqueLessons.has(key)) {
-        // For the first occurrence, store the item
         uniqueLessons.set(key, {
           ...item,
-          groups: [...item.groups], // Keep groups from the first occurrence
+          groups: [...item.groups],
         });
       } else {
-        // For subsequent occurrences, merge the groups
         const existingItem = uniqueLessons.get(key)!;
         const newGroups = item.groups.filter(
           (newGroup) =>
@@ -124,7 +116,6 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
       }
     });
 
-    // Now organize the deduplicated lessons
     Array.from(uniqueLessons.values()).forEach((item) => {
       const weeks = item.week === 'all' ? ['ch', 'zn'] : [item.week];
       weeks.forEach((week) => {
@@ -182,105 +173,221 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
     }
   }, [selectedTeacher, fetchTeacherSchedule]);
 
-  // Add search filter function
   const filterTeacher = (
     input: string,
-    option?: { label: string; value: string }
+    option?: { label: string; value: string; searchValue?: string }
   ) => {
     if (!option) return false;
-
-    const searchTerms = input.toLowerCase().split(' ');
-    const teacherName = option.label.toLowerCase();
-
-    // Check if all search terms are found in the teacher name
-    return searchTerms.every((term) => teacherName.includes(term));
+    const search = input.trim().toLowerCase();
+    return (
+      option.label.toLowerCase().includes(search) ||
+      (option.searchValue?.includes(search) ?? false)
+    );
   };
 
-  // Format teacher name helper
   const formatTeacherName = (teacher: Teacher) => {
     return `${teacher.lastName} ${teacher.firstName} ${teacher.middleName}`.trim();
   };
 
-  // Add search options with additional searchable fields
-  const getTeacherOptions = () => {
-    return teachers.map((teacher) => ({
+  const getTeacherOptions = useCallback(() => {
+    // Удаляем дубликаты по uuid с помощью Map
+    const uniqueTeachers = Array.from(
+      new Map(teachers.map((teacher) => [teacher.uuid, teacher])).values()
+    );
+
+    return uniqueTeachers.map((teacher) => ({
       label: formatTeacherName(teacher),
       value: teacher.uuid,
-      searchValue:
-        `${teacher.lastName} ${teacher.firstName} ${teacher.middleName} ${teacher.lastName}`.toLowerCase(),
+      searchValue: [
+        teacher.lastName,
+        teacher.firstName,
+        teacher.middleName,
+        `${teacher.lastName} ${teacher.firstName}`,
+        `${teacher.lastName} ${teacher.firstName} ${teacher.middleName}`,
+        `${teacher.firstName} ${teacher.lastName}`,
+      ]
+        .join(' ')
+        .toLowerCase(),
     }));
-  };
+  }, [teachers]);
 
-  const renderLessonContent = (lesson: ScheduleItem) => {
+  const renderLessonContent = (
+    lesson: ScheduleItem,
+    compact: boolean = false
+  ) => {
     if (!lesson) return null;
-
     const discipline = lesson.disciplines[0];
     const shortName = discipline?.abbr || discipline?.shortName;
     const fullName = discipline?.fullName;
 
+    const timeWidth = compact ? 65 : 75;
+    const timePadding = compact ? 6 : 10;
+    const maxContentWidth = `calc(100% - ${timeWidth + timePadding * 2}px)`;
+
     return (
-      <div className="lesson-card">
-        <div className="lesson-header">
-          <div className="lesson-name-container">
-            {discipline ? (
-              <>
-                <span className="full-name">{fullName || 'Нет названия'}</span>
+      <div
+        className={`lesson-card${compact ? ' compact' : ''}`}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: compact ? 40 : 50,
+          padding: compact ? '4px 6px 4px 6px' : '6px 10px 6px 10px',
+          marginBottom: compact ? 2 : 4,
+          boxSizing: 'border-box',
+          width: '100%',
+          maxWidth: '100%',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            width: maxContentWidth,
+            minWidth: 0,
+          }}
+        >
+          {discipline ? (
+            <>
+              {useShortNames ? (
                 <Tooltip
                   title={fullName}
                   mouseEnterDelay={0.1}
                   mouseLeaveDelay={0.15}
                   placement="topLeft"
                 >
-                  <span className="short-name">
+                  <span
+                    className="short-name"
+                    style={{
+                      fontWeight: 400,
+                      width: '100%',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'block',
+                      textAlign: 'left',
+                      minWidth: 0,
+                    }}
+                  >
                     {shortName || fullName || 'Нет названия'}
                   </span>
                 </Tooltip>
-                <div className="lesson-type">
-                  <Tag color={getActivityTypeColor(discipline.actType)}>
-                    {translateActivityType(discipline.actType)}
-                  </Tag>
-                </div>
-              </>
-            ) : (
-              <span>Нет названия</span>
-            )}
-          </div>
-          <div className="lesson-time">
-            {lesson.startTime}–{lesson.endTime}
-          </div>
-        </div>
-        {lesson.groups.length === 1 ? (
+              ) : (
+                <span
+                  className="full-name"
+                  title={fullName}
+                  style={{
+                    fontWeight: 400,
+                    width: '100%',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    display: 'block',
+                    textAlign: 'left',
+                    minWidth: 0,
+                  }}
+                >
+                  {fullName || 'Нет названия'}
+                </span>
+              )}
+
+              <div className="lesson-type" style={{ marginTop: 2 }}>
+                <Tag color={getActivityTypeColor(discipline.actType)}>
+                  {translateActivityType(discipline.actType)}
+                </Tag>
+              </div>
+            </>
+          ) : (
+            <span>Нет названия</span>
+          )}
+
           <div
-            className="lesson-groups"
-            style={{ color: '#000', cursor: 'default' }}
-          >
-            {lesson.groups[0].name}
-          </div>
-        ) : (
-          <Tooltip
-            title={lesson.groups.map((g) => g.name).join('\n')}
-            mouseEnterDelay={0.1}
-            mouseLeaveDelay={0.15}
-            placement="topLeft"
-            styles={{
-              root: {
-                maxWidth: '100%',
-                whiteSpace: 'pre-line',
-              },
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              marginTop: 2,
+              minWidth: 0,
             }}
           >
-            <div className="lesson-groups">{lesson.groups.length} групп(ы)</div>
-          </Tooltip>
-        )}
-        <div className="lesson-location">
-          {lesson.audiences.map((a) => `${a.building} ${a.name}`).join(', ')}
+            <div
+              className="lesson-groups"
+              style={{
+                color: '#1677ff',
+                cursor: lesson.groups.length > 1 ? 'help' : 'default',
+                fontWeight: 400,
+                fontSize: 13,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                width: '100%',
+              }}
+            >
+              {lesson.groups.length === 1 ? (
+                lesson.groups[0].name
+              ) : (
+                <Tooltip
+                  title={lesson.groups.map((g) => g.name).join('\n')}
+                  mouseEnterDelay={0.1}
+                  mouseLeaveDelay={0.15}
+                  placement="topLeft"
+                  overlayInnerStyle={{
+                    maxWidth: 320,
+                    whiteSpace: 'pre-line',
+                  }}
+                >
+                  <span>{lesson.groups.length} групп(ы)</span>
+                </Tooltip>
+              )}
+            </div>
+            <div
+              className="lesson-location"
+              style={{
+                fontSize: 13,
+                fontWeight: 400,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: '#444',
+                width: '100%',
+              }}
+            >
+              {lesson.audiences
+                .map((a) => `${a.building} ${a.name}`)
+                .join(', ')}
+            </div>
+          </div>
+        </div>
+
+        <div
+          className="lesson-time"
+          style={{
+            position: 'absolute',
+            right: compact ? 6 : 10,
+            top: compact ? 4 : 6,
+            width: timeWidth,
+            color: '#888',
+            fontSize: 13,
+            fontWeight: 400,
+            textAlign: 'right',
+            background: 'white',
+            paddingLeft: 4,
+            paddingRight: 2,
+            zIndex: 2,
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+            overflow: 'visible',
+          }}
+        >
+          {lesson.startTime}–{lesson.endTime}
         </div>
       </div>
     );
   };
 
   const renderScheduleTable = (weekType?: 'ch' | 'zn') => (
-    <div className="schedule-table-container teacher-schedule">
+    <div className={`schedule-table-container teacher-schedule`}>
       <table className="schedule-table">
         <thead>
           <tr>
@@ -300,7 +407,15 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                     ? renderCombinedCell(day.id, timeSlot.slot)
                     : weekType &&
                       organizedSchedule[weekType][day.id]?.[timeSlot.slot]?.map(
-                        (lesson) => renderLessonContent(lesson)
+                        (lesson, idx) => (
+                          <React.Fragment
+                            key={`${weekType}-${day.id}-${
+                              timeSlot.slot
+                            }-${idx}-${lesson.id || 'noid'}`}
+                          >
+                            {renderLessonContent(lesson)}
+                          </React.Fragment>
+                        )
                       )}
                 </td>
               ))}
@@ -315,17 +430,49 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
     const numeratorLessons = organizedSchedule.ch[dayId]?.[timeSlot] || [];
     const denominatorLessons = organizedSchedule.zn[dayId]?.[timeSlot] || [];
 
-    if (!numeratorLessons.length && !denominatorLessons.length) return null;
+    if (!numeratorLessons.length && !denominatorLessons.length) {
+      return (
+        <div className="combined-lesson-card no-lesson">
+          <div className="lesson-half no-lesson-cell">
+            <span className="no-lesson-text">—</span>
+          </div>
+        </div>
+      );
+    }
 
     return (
-      <div className="combined-lesson-card">
+      <div className="combined-lesson-card teacher-combined-highlight">
         <div className="lesson-half numerator">
-          {numeratorLessons.map((lesson) => renderLessonContent(lesson))}
-          {numeratorLessons.length > 0 && <WeekLabel isNumerator={true} />}
+          {numeratorLessons.length > 0 ? (
+            <>
+              {numeratorLessons.map((lesson, idx) => (
+                <React.Fragment
+                  key={`num-${dayId}-${timeSlot}-${idx}-${lesson.id || 'noid'}`}
+                >
+                  {renderLessonContent(lesson, true)}
+                </React.Fragment>
+              ))}
+              <WeekLabel isNumerator={true} />
+            </>
+          ) : (
+            <span className="no-lesson-text">—</span>
+          )}
         </div>
         <div className="lesson-half denominator">
-          {denominatorLessons.map((lesson) => renderLessonContent(lesson))}
-          {denominatorLessons.length > 0 && <WeekLabel isNumerator={false} />}
+          {denominatorLessons.length > 0 ? (
+            <>
+              {denominatorLessons.map((lesson, idx) => (
+                <React.Fragment
+                  key={`den-${dayId}-${timeSlot}-${idx}-${lesson.id || 'noid'}`}
+                >
+                  {renderLessonContent(lesson, true)}
+                </React.Fragment>
+              ))}
+              <WeekLabel isNumerator={false} />
+            </>
+          ) : (
+            <span className="no-lesson-text">—</span>
+          )}
         </div>
       </div>
     );
@@ -338,7 +485,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   );
 
   return (
-    <div className="schedule-viewer">
+    <div className="teacher-schedule-viewer-root">
       <AdminControls
         isModalOpen={isAdminModalOpen}
         onModalOpen={() => setIsAdminModalOpen(true)}
@@ -415,11 +562,9 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
               showSearch
               style={{ width: '100%' }}
               placeholder="Выберите преподавателя"
-              optionFilterProp="searchValue"
+              optionFilterProp="label"
               value={selectedTeacher}
               onChange={setSelectedTeacher}
-              searchValue={searchTerm}
-              onSearch={setSearchTerm}
               filterOption={filterTeacher}
               notFoundContent="Ничего не нашлось"
               loading={loading}

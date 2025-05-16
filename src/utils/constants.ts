@@ -12,7 +12,7 @@ export const DAYS: DayOfWeek[] = [
 export const TIME_SLOTS: TimeSlot[] = [
   { slot: 1, time: '08:30-10:00' },
   { slot: 2, time: '10:10-11:40' },
-  { slot: 3, time: '11:50-13:55' },
+  { slot: 3, time: '11:50-13:20' },
   { slot: 4, time: '14:05-15:35' },
   { slot: 5, time: '15:55-17:25' },
   { slot: 6, time: '17:35-19:05' },

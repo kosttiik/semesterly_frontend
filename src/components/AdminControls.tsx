@@ -1,28 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button, Modal, Progress, Typography, Space, Alert } from 'antd';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import './AdminControls.css';
+import { getPortal3Cookies, setPortalCookies } from '../services/authService';
 
 const { Text, Paragraph } = Typography;
 
 interface ProgressData {
   type: string;
-  currentItem: number;
-  totalItems: number;
+  currentItem?: number;
+  totalItems?: number;
   percentage: number;
-  eta: string;
+  eta?: string;
+  message?: string;
 }
 
 interface AdminControlsProps {
   isModalOpen: boolean;
   onModalOpen: () => void;
   onModalClose: () => void;
+  showExternalLoginAlert?: boolean;
 }
 
 const formatEta = (eta: string): string => {
-  // Handle empty or invalid eta
   if (!eta || eta === 'Вычисление...') return 'Вычисление...';
 
-  // Parse the eta string (format: "1m23s" or "45s")
   const minutes = eta.match(/(\d+)m/)?.[1];
   const seconds = eta.match(/(\d+)s/)?.[1];
 
@@ -58,6 +60,7 @@ const getSecondsForm = (seconds: number): string => {
 const AdminControls: React.FC<AdminControlsProps> = ({
   isModalOpen,
   onModalClose,
+  showExternalLoginAlert,
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressData, setProgressData] = useState<ProgressData>({
@@ -68,13 +71,23 @@ const AdminControls: React.FC<AdminControlsProps> = ({
     eta: '',
   });
   const [error, setError] = useState<string | null>(null);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [clearProgress, setClearProgress] = useState<ProgressData | null>(null);
+  const [clearSuccess, setClearSuccess] = useState(false);
   const ws = useRef<WebSocket | null>(null);
+  const clearWs = useRef<WebSocket | null>(null);
+  const [abortController, setAbortController] =
+    useState<AbortController | null>(null);
 
   useEffect(() => {
     return () => {
       if (ws.current) {
         ws.current.close();
         ws.current = null;
+      }
+      if (clearWs.current) {
+        clearWs.current.close();
+        clearWs.current = null;
       }
     };
   }, []);
@@ -85,12 +98,12 @@ const AdminControls: React.FC<AdminControlsProps> = ({
 
       if (data.type === 'insertProgress') {
         const percentage = Math.round(
-          (data.currentItem / data.totalItems) * 100
+          ((data.currentItem ?? 0) / (data.totalItems ?? 1)) * 100
         );
         setProgressData({
           type: data.type,
-          currentItem: data.currentItem,
-          totalItems: data.totalItems,
+          currentItem: data.currentItem ?? 0,
+          totalItems: data.totalItems ?? 0,
           percentage: percentage,
           eta: data.eta || 'Вычисление...',
         });
@@ -98,7 +111,6 @@ const AdminControls: React.FC<AdminControlsProps> = ({
         if (percentage >= 100) {
           setTimeout(() => {
             setIsProcessing(false);
-            // setIsModalOpen(false);
             if (ws.current) {
               ws.current.close();
               ws.current = null;
@@ -129,19 +141,31 @@ const AdminControls: React.FC<AdminControlsProps> = ({
       socket.onopen = async () => {
         console.log('WebSocket connected');
         try {
+          const controller = new AbortController();
+          setAbortController(controller);
+
+          const portalCookies = getPortal3Cookies();
+          setPortalCookies(portalCookies);
+
           const response = await fetch(
             'http://localhost:8080/api/v1/insert-data',
             {
               method: 'POST',
+              credentials: 'include',
+              signal: controller.signal,
             }
           );
 
           if (!response.ok) {
             throw new Error('Failed to start process');
           }
-        } catch (error) {
-          console.error('Failed to start process:', error);
-          setError('Не удалось начать процесс обновления данных');
+        } catch (error: unknown) {
+          if (error instanceof Error && error.name === 'AbortError') {
+            setError('Обновление отменено пользователем');
+          } else {
+            console.error('Failed to start process:', error);
+            setError('Не удалось начать процесс обновления данных');
+          }
           setIsProcessing(false);
           socket.close();
         }
@@ -170,8 +194,98 @@ const AdminControls: React.FC<AdminControlsProps> = ({
     }
   };
 
+  const cancelProcess = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
+    }
+    if (ws.current) {
+      ws.current.close();
+      ws.current = null;
+    }
+    setIsProcessing(false);
+  };
+
+  const handleClearDatabase = async () => {
+    setClearLoading(true);
+    setClearProgress({
+      type: 'clearProgress',
+      percentage: 0,
+      message: 'Начало очистки базы данных...',
+    });
+    setClearSuccess(false);
+    setError(null);
+
+    try {
+      const socket = new WebSocket('ws://localhost:8080/ws');
+      clearWs.current = socket;
+
+      socket.onopen = async () => {
+        try {
+          const response = await fetch(
+            'http://localhost:8080/api/v1/clear-data',
+            {
+              method: 'POST',
+            }
+          );
+          if (!response.ok) {
+            throw new Error('Failed to clear database');
+          }
+        } catch {
+          setError('Не удалось очистить базу данных');
+          setClearLoading(false);
+          socket.close();
+        }
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as ProgressData;
+          if (data.type === 'clearProgress') {
+            setClearProgress({
+              type: data.type,
+              currentItem: data.currentItem ?? 0,
+              totalItems: data.totalItems ?? 0,
+              percentage: data.percentage ?? 0,
+              message: data.message || '',
+            });
+            if ((data.percentage ?? 0) >= 100) {
+              setClearSuccess(true);
+              setTimeout(() => {
+                setClearLoading(false);
+                setClearProgress(null);
+                setClearSuccess(false);
+                if (clearWs.current) {
+                  clearWs.current.close();
+                  clearWs.current = null;
+                }
+              }, 1200);
+            }
+          }
+        } catch {
+          setError('Ошибка при получении прогресса очистки');
+        }
+      };
+
+      socket.onerror = () => {
+        setError('Ошибка при очистке базы данных');
+        setClearLoading(false);
+      };
+
+      socket.onclose = () => {
+        if (!clearSuccess && clearLoading) {
+          setError('Соединение с сервером было прервано');
+          setClearLoading(false);
+        }
+      };
+    } catch {
+      setError('Не удалось установить соединение с сервером');
+      setClearLoading(false);
+    }
+  };
+
   const handleModalClose = () => {
-    if (!isProcessing) {
+    if (!isProcessing && !clearLoading) {
       onModalClose();
     } else {
       Modal.confirm({
@@ -184,7 +298,16 @@ const AdminControls: React.FC<AdminControlsProps> = ({
             ws.current.close();
             ws.current = null;
           }
+          if (abortController) {
+            abortController.abort();
+            setAbortController(null);
+          }
+          if (clearWs.current) {
+            clearWs.current.close();
+            clearWs.current = null;
+          }
           setIsProcessing(false);
+          setClearLoading(false);
           onModalClose();
         },
       });
@@ -197,12 +320,44 @@ const AdminControls: React.FC<AdminControlsProps> = ({
       open={isModalOpen}
       onCancel={handleModalClose}
       footer={null}
-      closable={!isProcessing}
-      maskClosable={!isProcessing}
+      closable={!isProcessing && !clearLoading}
+      maskClosable={!isProcessing && !clearLoading}
       destroyOnClose
       centered
     >
       <Space direction="vertical" style={{ width: '100%' }} size="large">
+        {showExternalLoginAlert && (
+          <Alert
+            type="info"
+            icon={<InfoCircleOutlined />}
+            message={
+              <span>
+                <b>Вход на внешний портал</b> необходим для отображения полного
+                расписания.
+                <br />
+                <span style={{ color: '#888', fontSize: 12 }}>
+                  Без входа доступны только базовые данные.
+                </span>
+              </span>
+            }
+            style={{
+              padding: '6px 14px',
+              fontSize: 13,
+              borderRadius: 6,
+              margin: 0,
+              background: '#e6f4ff',
+              border: 'none',
+              color: '#1677ff',
+              fontWeight: 500,
+              minWidth: 180,
+              maxWidth: 340,
+              boxShadow: '0 2px 8px rgba(22,119,255,0.06)',
+              lineHeight: 1.4,
+            }}
+            banner
+            showIcon
+          />
+        )}
         {error && (
           <Alert
             message="Ошибка"
@@ -224,10 +379,34 @@ const AdminControls: React.FC<AdminControlsProps> = ({
           type="primary"
           onClick={startProcess}
           loading={isProcessing}
-          disabled={isProcessing}
+          disabled={isProcessing || clearLoading}
           block
         >
           {isProcessing ? 'Обновление данных...' : 'Обновить данные расписания'}
+        </Button>
+
+        {isProcessing && (
+          <Button
+            danger
+            type="default"
+            onClick={cancelProcess}
+            disabled={!isProcessing}
+            block
+            style={{ marginBottom: 8 }}
+          >
+            Отменить обновление
+          </Button>
+        )}
+
+        <Button
+          danger
+          type="default"
+          onClick={handleClearDatabase}
+          loading={clearLoading}
+          disabled={isProcessing || clearLoading}
+          block
+        >
+          Очистить базу данных
         </Button>
 
         {isProcessing && (
@@ -239,10 +418,33 @@ const AdminControls: React.FC<AdminControlsProps> = ({
             />
             <Space direction="vertical" size="small">
               <Text>
-                Прогресс: {progressData.currentItem}/{progressData.totalItems}
+                Прогресс: {progressData.currentItem ?? 0}/
+                {progressData.totalItems ?? 0}
               </Text>
               <Text type="secondary">
-                Осталось времени: {formatEta(progressData.eta)}
+                Осталось времени: {formatEta(progressData.eta ?? '')}
+              </Text>
+            </Space>
+          </div>
+        )}
+
+        {clearLoading && clearProgress && (
+          <div className="admin-control-progress">
+            <Progress
+              percent={Math.round(clearProgress.percentage)}
+              status={clearSuccess ? 'success' : 'active'}
+              style={{ marginBottom: 16 }}
+            />
+            <Space direction="vertical" size="small">
+              <Text>
+                Прогресс: {clearProgress.currentItem ?? 0}/
+                {clearProgress.totalItems ?? 0}
+              </Text>
+              <Text type="secondary">
+                {clearProgress.message ||
+                  (clearSuccess
+                    ? 'База данных успешно очищена'
+                    : 'Очистка базы данных...')}
               </Text>
             </Space>
           </div>

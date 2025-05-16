@@ -39,28 +39,25 @@ class ScheduleService {
   }
 
   async getAllGroups(): Promise<Group[]> {
-    // Check cache first
     const cachedGroups = CacheService.get<Group[]>('groups');
     if (cachedGroups) {
       return cachedGroups;
     }
 
-    const { data } = await this.api.get<Group[]>('/get-groups');
+    const response = await fetchWithAuth(`${API_URL}/get-groups`);
+    const data = await response.json();
     const groups = Array.isArray(data) ? data : [];
 
-    // Cache the result
     CacheService.set('groups', groups);
     return groups;
   }
 
   async getGroupSchedule(uuid: string): Promise<ScheduleItem[]> {
-    // Check memory cache first
     const cachedSchedule = this.scheduleCache.get(uuid);
     if (cachedSchedule) {
       return cachedSchedule;
     }
 
-    // Check localStorage cache
     const cacheKey = `schedule_${uuid}`;
     const cachedData = CacheService.get<ScheduleItem[]>(cacheKey);
     if (cachedData) {
@@ -68,12 +65,12 @@ class ScheduleService {
       return cachedData;
     }
 
-    const { data } = await this.api.get<ScheduleItem[]>(
-      `/get-group-schedule/${uuid}`
+    const response = await fetchWithAuth(
+      `${API_URL}/get-group-schedule/${uuid}`
     );
+    const data = await response.json();
     const schedule = data || [];
 
-    // Cache in both memory and localStorage
     this.scheduleCache.set(uuid, schedule);
     CacheService.set(cacheKey, schedule);
 
@@ -86,7 +83,8 @@ class ScheduleService {
       return cachedTeachers;
     }
 
-    const { data } = await this.api.get<Teacher[]>('/get-teachers');
+    const response = await fetchWithAuth(`${API_URL}/get-teachers`);
+    const data = await response.json();
     const teachers = Array.isArray(data) ? data : [];
 
     CacheService.set('teachers', teachers);
@@ -100,9 +98,10 @@ class ScheduleService {
       return cachedSchedule;
     }
 
-    const { data } = await this.api.get<ScheduleItem[]>(
-      `/get-teacher-schedule/${uuid}`
+    const response = await fetchWithAuth(
+      `${API_URL}/get-teacher-schedule/${uuid}`
     );
+    const data = await response.json();
     const schedule = data || [];
 
     CacheService.set(cacheKey, schedule);
@@ -113,11 +112,14 @@ class ScheduleService {
     if (uuid) {
       this.scheduleCache.delete(uuid);
       CacheService.remove(`schedule_${uuid}`);
+      CacheService.remove(`teacher_schedule_${uuid}`);
     } else {
       this.scheduleCache.clear();
-      // Clear all schedule-related items from localStorage
       Object.keys(localStorage)
-        .filter((key) => key.startsWith('schedule_'))
+        .filter(
+          (key) =>
+            key.startsWith('schedule_') || key.startsWith('teacher_schedule_')
+        )
         .forEach((key) => CacheService.remove(key));
     }
   }
@@ -142,6 +144,17 @@ class ScheduleService {
     const { data } = await this.lksApi.get<WeekInfo>('/schedules/current');
     return data;
   }
+}
+
+async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      ...options.headers,
+      'Content-Type': 'application/json',
+    },
+  });
 }
 
 export const scheduleService = new ScheduleService();
