@@ -48,7 +48,10 @@ class ScheduleService {
     const data = await response.json();
     const groups = Array.isArray(data) ? data : [];
 
-    CacheService.set('groups', groups);
+    // Не кэшируем пустой массив групп
+    if (groups.length > 0) {
+      CacheService.set('groups', groups);
+    }
     return groups;
   }
 
@@ -87,7 +90,10 @@ class ScheduleService {
     const data = await response.json();
     const teachers = Array.isArray(data) ? data : [];
 
-    CacheService.set('teachers', teachers);
+    // Не кэшируем пустой массив преподавателей
+    if (teachers.length > 0) {
+      CacheService.set('teachers', teachers);
+    }
     return teachers;
   }
 
