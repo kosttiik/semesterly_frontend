@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button, Modal, Progress, Typography, Space, Alert } from 'antd';
-import { InfoCircleOutlined } from '@ant-design/icons';
 import './AdminControls.css';
 import { getPortal3Cookies, setPortalCookies } from '../services/authService';
 
@@ -19,7 +18,8 @@ interface AdminControlsProps {
   isModalOpen: boolean;
   onModalOpen: () => void;
   onModalClose: () => void;
-  showExternalLoginAlert?: boolean;
+  onDatabaseUpdated?: () => void;
+  onDatabaseCleared?: () => void;
 }
 
 const formatEta = (eta: string): string => {
@@ -60,7 +60,8 @@ const getSecondsForm = (seconds: number): string => {
 const AdminControls: React.FC<AdminControlsProps> = ({
   isModalOpen,
   onModalClose,
-  showExternalLoginAlert,
+  onDatabaseUpdated,
+  onDatabaseCleared,
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progressData, setProgressData] = useState<ProgressData>({
@@ -115,6 +116,7 @@ const AdminControls: React.FC<AdminControlsProps> = ({
               ws.current.close();
               ws.current = null;
             }
+            if (onDatabaseUpdated) onDatabaseUpdated();
           }, 1000);
         }
       }
@@ -259,6 +261,7 @@ const AdminControls: React.FC<AdminControlsProps> = ({
                   clearWs.current.close();
                   clearWs.current = null;
                 }
+                if (onDatabaseCleared) onDatabaseCleared();
               }, 1200);
             }
           }
@@ -326,38 +329,6 @@ const AdminControls: React.FC<AdminControlsProps> = ({
       centered
     >
       <Space direction="vertical" style={{ width: '100%' }} size="large">
-        {showExternalLoginAlert && (
-          <Alert
-            type="info"
-            icon={<InfoCircleOutlined />}
-            message={
-              <span>
-                <b>Вход на внешний портал</b> необходим для отображения полного
-                расписания.
-                <br />
-                <span style={{ color: '#888', fontSize: 12 }}>
-                  Без входа доступны только базовые данные.
-                </span>
-              </span>
-            }
-            style={{
-              padding: '6px 14px',
-              fontSize: 13,
-              borderRadius: 6,
-              margin: 0,
-              background: '#e6f4ff',
-              border: 'none',
-              color: '#1677ff',
-              fontWeight: 500,
-              minWidth: 180,
-              maxWidth: 340,
-              boxShadow: '0 2px 8px rgba(22,119,255,0.06)',
-              lineHeight: 1.4,
-            }}
-            banner
-            showIcon
-          />
-        )}
         {error && (
           <Alert
             message="Ошибка"
@@ -370,9 +341,11 @@ const AdminControls: React.FC<AdminControlsProps> = ({
           />
         )}
 
-        <Paragraph>
-          Эта функция обновляет базу данных расписания, загружая актуальную
-          информацию из LKS BMSTU. Процесс может занять несколько минут.
+        <Paragraph style={{ textAlign: 'center' }}>
+          Эта функция принудительно обновляет базу данных расписания, загружая
+          актуальную информацию из LKS BMSTU.
+          <br />
+          <b>Процесс может занять несколько минут.</b>
         </Paragraph>
 
         <Button

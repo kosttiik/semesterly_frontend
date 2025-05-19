@@ -13,6 +13,7 @@ import {
   clearAuthStorage,
   clearPortalCookies,
 } from '../services/authService';
+import './AppBreadcrumbs.css';
 
 interface AppBreadcrumbsProps {
   showExternalLoginButton?: boolean;
@@ -232,11 +233,13 @@ const AppBreadcrumbs: React.FC<AppBreadcrumbsProps> = ({
               icon={<InfoCircleOutlined />}
               message={
                 <span>
-                  Вход на внешний портал необходим для отображения полного
-                  расписания.
+                  <b>
+                    Вход в Бауманский аккаунт необходим для отображения полного
+                    расписания
+                  </b>
                   <br />
                   <span style={{ color: '#888', fontSize: 12 }}>
-                    Без входа доступны только базовые данные.
+                    Без входа доступны только неполные данные
                   </span>
                 </span>
               }
@@ -282,50 +285,5 @@ const AppBreadcrumbs: React.FC<AppBreadcrumbsProps> = ({
     </div>
   );
 };
-
-const style = document.createElement('style');
-style.innerHTML = `
-  .user-info-dropdown {
-    -webkit-tap-highlight-color: transparent;
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 6px 16px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    height: 32px;
-  }
-  .user-info-dropdown:hover {
-    background: rgba(22, 119, 255, 0.04);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(22, 119, 255, 0.1);
-  }
-  .user-info-dropdown:active {
-    transform: translateY(0);
-  }
-  .user-info-dropdown:hover span {
-    color: #1677ff;
-  }
-  .user-info-dropdown::after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    width: 0;
-    height: 2px;
-    background: #1677ff;
-    transition: all 0.3s ease;
-    transform: translateX(-50%);
-    opacity: 0;
-    border-radius: 1px;
-  }
-  .user-info-dropdown:hover::after {
-    width: calc(100% - 32px);
-    opacity: 0.6;
-  }
-`;
-document.head.appendChild(style);
 
 export default AppBreadcrumbs;

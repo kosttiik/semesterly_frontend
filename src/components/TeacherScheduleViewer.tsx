@@ -27,9 +27,11 @@ import { DAYS, TIME_SLOTS } from '../utils/constants';
 import {
   generateTeacherExcelWorkbook,
   downloadExcel,
+  generateTeacherExcelWorkbookForWeek, // добавлено
 } from '../utils/excelExport';
 import dayjs from 'dayjs';
 import '../App.css';
+import CacheService from '../services/cacheService';
 
 const { Title } = Typography;
 
@@ -80,6 +82,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   const [useShortNames, setUseShortNames] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [selectedWeekType, setSelectedWeekType] = useState<'ch' | 'zn'>('ch');
 
   const getLessonKey = (item: ScheduleItem): string => {
     return [
@@ -172,21 +175,21 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
 
   useEffect(() => {
     fetchTeachers();
-  }, [fetchTeachers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  useEffect(() => {
-    if (selectedTeacher) {
-      fetchTeacherSchedule(selectedTeacher);
-    }
-  }, [selectedTeacher, fetchTeacherSchedule]);
-
-  // Загрузка всех групп для отображения их названий в экспорте
   useEffect(() => {
     scheduleService
       .getAllGroups()
       .then(setGroups)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (selectedTeacher) {
+      fetchTeacherSchedule(selectedTeacher);
+    }
+  }, [selectedTeacher, fetchTeacherSchedule]);
 
   const filterTeacher = (
     input: string,
@@ -532,20 +535,53 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
             ' '
           )
         : 'Преподаватель';
-      const wb = await generateTeacherExcelWorkbook(
-        teacherName,
-        teacherScheduleMap,
-        groups
-      );
+
+      let wb;
+      let filename;
       const timestamp = dayjs().format('DD-MM-YYYY');
-      const filename = `Расписание_${teacherName}_${timestamp}.xlsx`;
+
+      if (displayMode === 'separate') {
+        // Экспорт только выбранной недели
+        wb = await generateTeacherExcelWorkbookForWeek(
+          teacherName,
+          selectedWeekType,
+          teacherScheduleMap,
+          groups
+        );
+        filename = `Расписание_${teacherName}_${
+          selectedWeekType === 'ch' ? 'Числитель' : 'Знаменатель'
+        }_${timestamp}.xlsx`;
+      } else {
+        // Старый экспорт для объединённого вида
+        wb = await generateTeacherExcelWorkbook(
+          teacherName,
+          teacherScheduleMap,
+          groups
+        );
+        filename = `Расписание_${teacherName}_${timestamp}.xlsx`;
+      }
+
       await downloadExcel(wb, filename);
       message.success('Расписание успешно экспортировано');
     } catch (error) {
       console.error('Export failed:', error);
       message.error('Не удалось экспортировать расписание');
     }
-  }, [selectedTeacher, teachers, teacherScheduleMap, groups]);
+  }, [
+    selectedTeacher,
+    teachers,
+    teacherScheduleMap,
+    groups,
+    displayMode,
+    selectedWeekType,
+  ]);
+
+  // Обновить преподавателей и сбросить их кэш
+  const handleRefreshTeachers = useCallback(async () => {
+    CacheService.remove('teachers');
+    await fetchTeachers();
+    message.success('Преподаватели обновлены');
+  }, [fetchTeachers]);
 
   return (
     <div className="teacher-schedule-viewer-root">
@@ -553,6 +589,20 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
         isModalOpen={isAdminModalOpen}
         onModalOpen={() => setIsAdminModalOpen(true)}
         onModalClose={() => setIsAdminModalOpen(false)}
+        onDatabaseUpdated={() => {
+          fetchTeachers();
+          scheduleService
+            .getAllGroups()
+            .then(setGroups)
+            .catch(() => {});
+        }}
+        onDatabaseCleared={() => {
+          fetchTeachers();
+          scheduleService
+            .getAllGroups()
+            .then(setGroups)
+            .catch(() => {});
+        }}
       />
       <Card className="schedule-controls-card">
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -608,13 +658,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                 Экспорт в Excel
               </Button>
             </Space>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={() =>
-                selectedTeacher && fetchTeacherSchedule(selectedTeacher, true)
-              }
-              disabled={!selectedTeacher}
-            >
+            <Button icon={<ReloadOutlined />} onClick={handleRefreshTeachers}>
               Обновить
             </Button>
           </Space>
@@ -653,16 +697,17 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
           >
             {displayMode === 'separate' ? (
               <Tabs
-                defaultActiveKey="numerator"
+                activeKey={selectedWeekType}
+                onChange={(key) => setSelectedWeekType(key as 'ch' | 'zn')}
                 type="card"
                 items={[
                   {
-                    key: 'numerator',
+                    key: 'ch',
                     label: 'Числитель',
                     children: renderScheduleTable('ch'),
                   },
                   {
-                    key: 'denominator',
+                    key: 'zn',
                     label: 'Знаменатель',
                     children: renderScheduleTable('zn'),
                   },

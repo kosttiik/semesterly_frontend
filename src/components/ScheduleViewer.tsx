@@ -31,10 +31,10 @@ import { ScheduleItem, Group, Teacher, TimeSlot } from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import { parseTime } from '../utils/timeUtils';
 import dayjs from 'dayjs';
-import CacheService from '../services/cacheService';
 import AdminControls from './AdminControls';
 import { DAYS, TIME_SLOTS } from '../utils/constants';
 import { generateExcelWorkbook, downloadExcel } from '../utils/excelExport';
+import CacheService from '../services/cacheService';
 
 const { Title } = Typography;
 
@@ -51,7 +51,21 @@ interface ScheduleViewerProps {
 
 // Определение типа ScheduleMap для мемоизированной структуры данных
 interface ScheduleMap {
-  [weekType: string]: {
+  ch: {
+    [day: number]: {
+      [timeSlot: number]: {
+        [groupId: string]: ScheduleItem[];
+      };
+    };
+  };
+  zn: {
+    [day: number]: {
+      [timeSlot: number]: {
+        [groupId: string]: ScheduleItem[];
+      };
+    };
+  };
+  [key: string]: {
     [day: number]: {
       [timeSlot: number]: {
         [groupId: string]: ScheduleItem[];
@@ -83,10 +97,10 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     'idle' | 'loading' | 'success' | 'error'
   >('idle');
   const [groups, setGroups] = useState<Group[]>([]);
-  const [, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [useShortNames, setUseShortNames] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [selectedWeekType, setSelectedWeekType] = useState<'ch' | 'zn'>('ch'); // новое состояние
 
   // Отслеживание загруженных расписаний
   const fetchedSchedules = useRef<Set<string>>(new Set());
@@ -141,20 +155,25 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   );
 
   // Получение групп
-  const fetchGroups = useCallback(async () => {
-    console.log('Fetching groups...');
+  const fetchGroups = useCallback(async (forceRefresh = false) => {
     setGroupsStatus('loading');
-    setError(null);
     setGroups([]);
 
-    // Очистка кэша групп
-    CacheService.remove('groups');
-
     try {
-      const fetchedGroups = await scheduleService.getAllGroups();
+      if (forceRefresh) {
+        if (typeof scheduleService.clearGroupsCache === 'function') {
+          scheduleService.clearGroupsCache();
+        }
+      }
+      let fetchedGroups: Group[];
+      if (forceRefresh) {
+        CacheService.remove('groups');
+        fetchedGroups = await scheduleService.getAllGroups();
+      } else {
+        fetchedGroups = await scheduleService.getAllGroups();
+      }
 
       if (fetchedGroups.length === 0) {
-        setError('Нет доступных групп');
         setGroupsStatus('error');
         return;
       }
@@ -162,10 +181,15 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       setGroupsStatus('success');
     } catch (err) {
       console.error('Failed to fetch groups:', err);
-      setError('Ошибка загрузки групп');
       setGroupsStatus('error');
       message.error('Не удалось загрузить список групп');
     }
+  }, []);
+
+  // Первоначальная загрузка групп
+  useEffect(() => {
+    fetchGroups(true); // Always force fetch on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Оптимизированная загрузка данных расписания
@@ -211,18 +235,6 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     },
     [selectedGroups]
   );
-
-  // Очистка кэша при размонтировании компонента
-  useEffect(() => {
-    return () => {
-      scheduleService.clearScheduleCache();
-    };
-  }, []);
-
-  // Первоначальная загрузка групп
-  useEffect(() => {
-    if (groupsStatus === 'idle') fetchGroups();
-  }, [fetchGroups, groupsStatus]);
 
   // Загрузка расписания при изменении групп
   useEffect(() => {
@@ -424,7 +436,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
     return (
       <div
-        key={`${lesson.id}_${groupId}_${
+        key={`${lesson.id}_${groupId}__${
           lesson.disciplines[0]?.fullName
         }_${lesson.teachers.map((t) => t.id).join('_')}`}
         className="lesson-card"
@@ -516,17 +528,32 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     }
 
     try {
-      const wb = await generateExcelWorkbook(
-        scheduleMap,
-        selectedGroups,
-        groups
-      );
+      let wb;
+      let filename;
       const groupNames = selectedGroups
         .map((id) => groups.find((g) => g.uuid === id)?.name)
         .filter(Boolean)
         .join('_');
       const timestamp = dayjs().format('DD-MM-YYYY');
-      const filename = `Расписание_${groupNames}_${timestamp}.xlsx`;
+
+      if (displayMode === 'separate') {
+        // Экспорт только выбранной недели
+        const { generateExcelWorkbookForWeek } = await import(
+          '../utils/excelExport'
+        );
+        wb = await generateExcelWorkbookForWeek(
+          scheduleMap,
+          selectedGroups,
+          groups,
+          selectedWeekType
+        );
+        filename = `Расписание_${groupNames}_${
+          selectedWeekType === 'ch' ? 'Числитель' : 'Знаменатель'
+        }_${timestamp}.xlsx`;
+      } else {
+        wb = await generateExcelWorkbook(scheduleMap, selectedGroups, groups);
+        filename = `Расписание_${groupNames}_${timestamp}.xlsx`;
+      }
 
       await downloadExcel(wb, filename);
       message.success('Расписание успешно экспортировано');
@@ -534,7 +561,17 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       console.error('Export failed:', error);
       message.error('Не удалось экспортировать расписание');
     }
-  }, [scheduleMap, selectedGroups, groups]);
+  }, [scheduleMap, selectedGroups, groups, displayMode, selectedWeekType]);
+
+  // Обновить группы и преподавателей и сбросить их кэш
+  const handleRefreshGroups = useCallback(async () => {
+    if (typeof scheduleService.clearGroupsCache === 'function') {
+      scheduleService.clearGroupsCache();
+    }
+    CacheService.remove('teachers');
+    await fetchGroups(true);
+    message.success('Группы обновлены');
+  }, [fetchGroups]);
 
   return (
     <div className="schedule-viewer">
@@ -542,6 +579,8 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         isModalOpen={isAdminModalOpen}
         onModalOpen={() => setIsAdminModalOpen(true)}
         onModalClose={() => setIsAdminModalOpen(false)}
+        onDatabaseUpdated={() => fetchGroups(true)}
+        onDatabaseCleared={() => fetchGroups(true)}
       />
       <Card className="schedule-controls-card">
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -606,11 +645,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
               </Button>
             </Space>
             <Space>
-              <Button
-                icon={<ReloadOutlined />}
-                onClick={() => fetchScheduleData(true)}
-                disabled={selectedGroups.length === 0}
-              >
+              <Button icon={<ReloadOutlined />} onClick={handleRefreshGroups}>
                 Обновить
               </Button>
             </Space>
@@ -728,22 +763,23 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
           >
             {displayMode === 'separate' ? (
               <Tabs
-                defaultActiveKey="numerator"
+                activeKey={selectedWeekType}
+                onChange={(key) => setSelectedWeekType(key as 'ch' | 'zn')}
                 type="card"
                 items={[
                   {
-                    key: 'numerator',
+                    key: 'ch',
                     label: 'Числитель',
                     children: renderScheduleTable('ch'),
                   },
                   {
-                    key: 'denominator',
+                    key: 'zn',
                     label: 'Знаменатель',
                     children: renderScheduleTable('zn'),
                   },
                 ]}
                 style={{
-                  marginBottom: '-1px', // Удаление зазора между вкладками и таблицей
+                  marginBottom: '-1px',
                   backgroundColor: '#fff',
                   borderTopLeftRadius: '8px',
                   borderTopRightRadius: '8px',

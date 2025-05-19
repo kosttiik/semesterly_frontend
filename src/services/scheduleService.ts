@@ -114,6 +114,10 @@ class ScheduleService {
     return schedule;
   }
 
+  clearGroupsCache(): void {
+    CacheService.remove('groups');
+  }
+
   clearScheduleCache(uuid?: string): void {
     if (uuid) {
       this.scheduleCache.delete(uuid);
