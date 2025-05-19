@@ -56,18 +56,6 @@ class ScheduleService {
   }
 
   async getGroupSchedule(uuid: string): Promise<ScheduleItem[]> {
-    const cachedSchedule = this.scheduleCache.get(uuid);
-    if (cachedSchedule) {
-      return cachedSchedule;
-    }
-
-    const cacheKey = `schedule_${uuid}`;
-    const cachedData = CacheService.get<ScheduleItem[]>(cacheKey);
-    if (cachedData) {
-      this.scheduleCache.set(uuid, cachedData);
-      return cachedData;
-    }
-
     const response = await fetchWithAuth(
       `${API_URL}/get-group-schedule/${uuid}`
     );
@@ -75,7 +63,6 @@ class ScheduleService {
     const schedule = data || [];
 
     this.scheduleCache.set(uuid, schedule);
-    CacheService.set(cacheKey, schedule);
 
     return schedule;
   }
