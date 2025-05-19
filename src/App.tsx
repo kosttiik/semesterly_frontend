@@ -179,7 +179,7 @@ const App: React.FC = () => {
             <Content style={{ padding: '24px', backgroundColor: '#f5f5f5' }}>
               <Modal
                 open={externalLoginVisible}
-                title="Вход на внешний портал"
+                title="Вход в Бауманский аккаунт"
                 onCancel={() => setExternalLoginVisible(false)}
                 footer={null}
                 destroyOnClose
