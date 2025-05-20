@@ -85,19 +85,12 @@ class ScheduleService {
   }
 
   async getTeacherSchedule(uuid: string): Promise<ScheduleItem[]> {
-    const cacheKey = `teacher_schedule_${uuid}`;
-    const cachedSchedule = CacheService.get<ScheduleItem[]>(cacheKey);
-    if (cachedSchedule) {
-      return cachedSchedule;
-    }
-
     const response = await fetchWithAuth(
       `${API_URL}/get-teacher-schedule/${uuid}`
     );
     const data = await response.json();
     const schedule = data || [];
 
-    CacheService.set(cacheKey, schedule);
     return schedule;
   }
 
@@ -109,14 +102,10 @@ class ScheduleService {
     if (uuid) {
       this.scheduleCache.delete(uuid);
       CacheService.remove(`schedule_${uuid}`);
-      CacheService.remove(`teacher_schedule_${uuid}`);
     } else {
       this.scheduleCache.clear();
       Object.keys(localStorage)
-        .filter(
-          (key) =>
-            key.startsWith('schedule_') || key.startsWith('teacher_schedule_')
-        )
+        .filter((key) => key.startsWith('schedule_'))
         .forEach((key) => CacheService.remove(key));
     }
   }

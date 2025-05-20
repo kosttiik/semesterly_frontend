@@ -580,7 +580,10 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         onModalOpen={() => setIsAdminModalOpen(true)}
         onModalClose={() => setIsAdminModalOpen(false)}
         onDatabaseUpdated={() => fetchGroups(true)}
-        onDatabaseCleared={() => fetchGroups(true)}
+        onDatabaseCleared={() => {
+          fetchGroups(true);
+          CacheService.remove('teachers');
+        }}
       />
       <Card className="schedule-controls-card">
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>

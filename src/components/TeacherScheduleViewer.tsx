@@ -20,14 +20,18 @@ import {
   SettingOutlined,
   DownloadOutlined,
 } from '@ant-design/icons';
-import { ScheduleItem, Teacher, Group } from '../types/schedule';
+import {
+  ScheduleItem as OrigScheduleItem,
+  Teacher,
+  Group,
+} from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import AdminControls from './AdminControls';
 import { DAYS, TIME_SLOTS } from '../utils/constants';
 import {
   generateTeacherExcelWorkbook,
   downloadExcel,
-  generateTeacherExcelWorkbookForWeek, // добавлено
+  generateMultiTeacherExcelWorkbook,
 } from '../utils/excelExport';
 import dayjs from 'dayjs';
 import '../App.css';
@@ -71,11 +75,21 @@ interface TeacherScheduleViewerProps {
   setDisplayMode: (mode: 'separate' | 'combined') => void;
 }
 
+type ScheduleItem = OrigScheduleItem & { __teacherUuid?: string };
+
+const TEACHER_COLORS = [
+  '#1677ff', // синий
+  '#f5222d', // красный
+  '#722ed1', // фиолетовый
+  '#52c41a', // зеленый
+  '#fa8c16', // оранжевый
+] as const;
+
 const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   displayMode,
   setDisplayMode,
 }) => {
-  const [selectedTeacher, setSelectedTeacher] = useState<string | null>(null);
+  const [selectedTeachers, setSelectedTeachers] = useState<string[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -84,63 +98,85 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedWeekType, setSelectedWeekType] = useState<'ch' | 'zn'>('ch');
 
-  const getLessonKey = (item: ScheduleItem): string => {
-    return [
-      item.day,
-      item.time,
-      item.startTime,
-      item.endTime,
-      item.disciplines[0]?.fullName,
-      item.disciplines[0]?.actType,
-      item.audiences.map((a) => `${a.building}${a.name}`).join(','),
-    ].join('_');
-  };
-
+  // Для одного или нескольких преподавателей: группируем по ключу занятия, фильтруем по выбранным преподавателям если их несколько
   const organizedSchedule = useMemo(() => {
-    const organized: Record<
-      string,
-      Record<number, Record<number, ScheduleItem[]>>
-    > = {
-      ch: {},
-      zn: {},
-    };
+    function groupLessonsByKey(
+      lessons: ScheduleItem[],
+      filterTeacherUuids?: string[]
+    ): Record<string, Record<number, Record<number, ScheduleItem[]>>> {
+      const organized: Record<
+        string,
+        Record<number, Record<number, ScheduleItem[]>>
+      > = {
+        ch: {},
+        zn: {},
+      };
+      const uniqueLessons = new Map<string, ScheduleItem>();
 
-    const uniqueLessons = new Map<string, ScheduleItem>();
-
-    scheduleData.forEach((item) => {
-      const key = getLessonKey(item);
-      if (!uniqueLessons.has(key)) {
-        uniqueLessons.set(key, {
-          ...item,
-          groups: [...item.groups],
-        });
-      } else {
-        const existingItem = uniqueLessons.get(key)!;
-        const newGroups = item.groups.filter(
-          (newGroup) =>
-            !existingItem.groups.some(
-              (existingGroup) => existingGroup.uuid === newGroup.uuid
-            )
-        );
-        existingItem.groups.push(...newGroups);
-      }
-    });
-
-    Array.from(uniqueLessons.values()).forEach((item) => {
-      const weeks = item.week === 'all' ? ['ch', 'zn'] : [item.week];
-      weeks.forEach((week) => {
-        if (!organized[week][item.day]) {
-          organized[week][item.day] = {};
+      lessons.forEach((item) => {
+        if (
+          filterTeacherUuids &&
+          !filterTeacherUuids.includes(item.__teacherUuid ?? '')
+        ) {
+          return;
         }
-        if (!organized[week][item.day][item.time]) {
-          organized[week][item.day][item.time] = [];
+        const key = [
+          item.day,
+          item.time,
+          item.startTime,
+          item.endTime,
+          item.disciplines[0]?.fullName,
+          item.disciplines[0]?.actType,
+          item.audiences.map((a) => `${a.building}${a.name}`).join(','),
+          item.__teacherUuid ?? '',
+        ].join('_');
+        if (!uniqueLessons.has(key)) {
+          uniqueLessons.set(key, {
+            ...item,
+            groups: [...item.groups],
+          });
+        } else {
+          const existingItem = uniqueLessons.get(key)!;
+          // Добавить только уникальные группы
+          const newGroups = item.groups.filter(
+            (newGroup) =>
+              !existingItem.groups.some(
+                (existingGroup) => existingGroup.uuid === newGroup.uuid
+              )
+          );
+          existingItem.groups.push(...newGroups);
         }
-        organized[week][item.day][item.time].push(item);
       });
-    });
 
-    return organized;
-  }, [scheduleData]);
+      Array.from(uniqueLessons.values()).forEach((item) => {
+        const weeks = item.week === 'all' ? ['ch', 'zn'] : [item.week];
+        weeks.forEach((week) => {
+          if (!organized[week][item.day]) {
+            organized[week][item.day] = {};
+          }
+          if (!organized[week][item.day][item.time]) {
+            organized[week][item.day][item.time] = [];
+          }
+          organized[week][item.day][item.time].push(item);
+        });
+      });
+      return organized;
+    }
+
+    if (selectedTeachers.length <= 1) {
+      return groupLessonsByKey(scheduleData);
+    } else {
+      return groupLessonsByKey(scheduleData, selectedTeachers);
+    }
+  }, [scheduleData, selectedTeachers]);
+
+  const getTeacherColor = useCallback(
+    (teacherUuid: string) => {
+      const idx = selectedTeachers.indexOf(teacherUuid);
+      return TEACHER_COLORS[idx % TEACHER_COLORS.length];
+    },
+    [selectedTeachers]
+  );
 
   const fetchTeachers = useCallback(async () => {
     try {
@@ -152,19 +188,29 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
     }
   }, []);
 
-  const fetchTeacherSchedule = useCallback(
-    async (uuid: string, forceRefresh = false) => {
-      if (!uuid) return;
-
+  // Получить все занятия для выбранных преподавателей
+  const fetchTeacherSchedules = useCallback(
+    async (uuids: string[], forceRefresh = false) => {
+      if (!uuids.length) {
+        setScheduleData([]);
+        return;
+      }
       setLoading(true);
       try {
         if (forceRefresh) {
-          scheduleService.clearScheduleCache(`teacher_${uuid}`);
+          uuids.forEach((uuid) =>
+            scheduleService.clearScheduleCache(`teacher_${uuid}`)
+          );
         }
-        const schedule = await scheduleService.getTeacherSchedule(uuid);
-        setScheduleData(schedule);
-      } catch (err) {
-        console.error('Failed to fetch teacher schedule:', err);
+        const allSchedules = await Promise.all(
+          uuids.map((uuid) => scheduleService.getTeacherSchedule(uuid))
+        );
+        const merged = allSchedules.flat().map((item) => ({
+          ...item,
+          __teacherUuid: item.teachers[0]?.uuid || '',
+        }));
+        setScheduleData(merged);
+      } catch {
         message.error('Не удалось загрузить расписание преподавателя');
       } finally {
         setLoading(false);
@@ -186,10 +232,12 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   }, []);
 
   useEffect(() => {
-    if (selectedTeacher) {
-      fetchTeacherSchedule(selectedTeacher);
+    if (selectedTeachers.length === 1) {
+      fetchTeacherSchedules(selectedTeachers);
+    } else if (selectedTeachers.length > 1) {
+      fetchTeacherSchedules(selectedTeachers);
     }
-  }, [selectedTeacher, fetchTeacherSchedule]);
+  }, [selectedTeachers, fetchTeacherSchedules]);
 
   const filterTeacher = (
     input: string,
@@ -207,12 +255,11 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
     return `${teacher.lastName} ${teacher.firstName} ${teacher.middleName}`.trim();
   };
 
+  // Получаем опции для Select
   const getTeacherOptions = useCallback(() => {
-    // Удаляем дубликаты по uuid с помощью Map
     const uniqueTeachers = Array.from(
       new Map(teachers.map((teacher) => [teacher.uuid, teacher])).values()
     );
-
     return uniqueTeachers.map((teacher) => ({
       label: formatTeacherName(teacher),
       value: teacher.uuid,
@@ -256,6 +303,8 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
           maxWidth: '100%',
           overflow: 'hidden',
           position: 'relative',
+          minWidth: 0,
+          wordBreak: 'break-word',
         }}
       >
         <div
@@ -264,6 +313,8 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
             flexDirection: 'column',
             width: maxContentWidth,
             minWidth: 0,
+            overflow: 'hidden',
+            wordBreak: 'break-word',
           }}
         >
           {discipline ? (
@@ -385,6 +436,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
             right: compact ? 6 : 10,
             top: compact ? 4 : 6,
             width: timeWidth,
+            maxWidth: 90,
             color: '#888',
             fontSize: 13,
             fontWeight: 400,
@@ -395,10 +447,326 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
             zIndex: 2,
             borderRadius: 4,
             whiteSpace: 'nowrap',
-            overflow: 'visible',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            minWidth: 0,
           }}
         >
           {lesson.startTime}–{lesson.endTime}
+        </div>
+      </div>
+    );
+  };
+
+  const renderColoredLessonCard = (
+    lesson: ScheduleItem,
+    weekLabel?: React.ReactNode
+  ) => {
+    const teacherUuid: string =
+      typeof lesson.__teacherUuid === 'string' ? lesson.__teacherUuid : '';
+    const teacher = teachers.find((t) => t.uuid === teacherUuid);
+    const color = getTeacherColor(teacherUuid);
+    const discipline = lesson.disciplines[0];
+    const shortName = discipline?.abbr || discipline?.shortName;
+    const fullName = discipline?.fullName;
+    return (
+      <div
+        className="lesson-card"
+        style={{
+          position: 'relative',
+          borderLeft: `4px solid ${color}`,
+          backgroundColor: `${color}10`,
+          marginBottom: 0,
+          marginTop: 0,
+          marginLeft: 0,
+          marginRight: 0,
+          borderRadius: 8,
+          boxShadow: 'none',
+          width: '100%',
+          minWidth: 0,
+          padding: '12px 10px 10px 10px',
+          overflow: 'hidden',
+          wordBreak: 'break-word',
+        }}
+      >
+        {weekLabel && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: 8,
+              zIndex: 2,
+            }}
+          >
+            {weekLabel}
+          </div>
+        )}
+        <div
+          style={{
+            position: 'absolute',
+            right: 10,
+            top: 6,
+            color: '#888',
+            fontSize: 13,
+            fontWeight: 400,
+            textAlign: 'right',
+            background: 'transparent',
+            paddingLeft: 4,
+            paddingRight: 2,
+            zIndex: 2,
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            minWidth: 0,
+          }}
+        >
+          {lesson.startTime}–{lesson.endTime}
+        </div>
+        <div
+          style={{
+            fontWeight: 500,
+            color: color,
+            marginBottom: 2,
+            minWidth: 0,
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+          }}
+        >
+          {teacher
+            ? `${teacher.lastName} ${teacher.firstName[0]}.${teacher.middleName[0]}.`
+            : ''}
+        </div>
+        <div
+          style={{
+            minWidth: 0,
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
+          {useShortNames ? (
+            <Tooltip
+              title={fullName}
+              mouseEnterDelay={0.1}
+              mouseLeaveDelay={0.15}
+              placement="topLeft"
+            >
+              <span
+                className="short-name"
+                style={{
+                  fontWeight: 400,
+                  maxWidth: 140,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-block',
+                  textAlign: 'left',
+                  minWidth: 0,
+                  fontSize: 14,
+                }}
+              >
+                {shortName || fullName || 'Нет названия'}
+              </span>
+            </Tooltip>
+          ) : (
+            <span
+              className="full-name"
+              title={fullName}
+              style={{
+                fontWeight: 400,
+                maxWidth: 250,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                display: 'inline-block',
+                textAlign: 'left',
+                minWidth: 0,
+                fontSize: 14,
+              }}
+            >
+              {fullName || 'Нет названия'}
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: '#444',
+            minWidth: 0,
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+          }}
+        >
+          {lesson.audiences.map((a) => `${a.building} ${a.name}`).join(', ')}
+        </div>
+        <div
+          style={{
+            fontSize: 13,
+            color: '#1677ff',
+            minWidth: 0,
+            overflow: 'hidden',
+            wordBreak: 'break-word',
+          }}
+        >
+          {lesson.groups.length === 1 ? (
+            lesson.groups[0].name
+          ) : (
+            <Tooltip
+              title={lesson.groups.map((g) => g.name).join('\n')}
+              mouseEnterDelay={0.1}
+              mouseLeaveDelay={0.15}
+              placement="topLeft"
+              overlayInnerStyle={{
+                maxWidth: 320,
+                whiteSpace: 'pre-line',
+              }}
+            >
+              <span>{lesson.groups.length} групп(ы)</span>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderCombinedCell = (dayId: number, timeSlot: number) => {
+    const numeratorLessons = organizedSchedule.ch[dayId]?.[timeSlot] || [];
+    const denominatorLessons = organizedSchedule.zn[dayId]?.[timeSlot] || [];
+
+    // Если нет занятий ни у одного преподавателя ни в одной из половин показываем прочерк
+    if (
+      selectedTeachers.length <= 1 &&
+      !numeratorLessons.length &&
+      !denominatorLessons.length
+    ) {
+      return (
+        <div className="combined-lesson-card no-lesson">
+          <div className="lesson-half no-lesson-cell">
+            <span className="no-lesson-text">—</span>
+          </div>
+        </div>
+      );
+    }
+
+    // Для одного преподавателя: обычная карточка с синим ободком
+    if (selectedTeachers.length <= 1) {
+      return (
+        <div className="combined-lesson-card teacher-combined-highlight">
+          <div className="lesson-half numerator">
+            {numeratorLessons.length > 0
+              ? numeratorLessons.map((lesson, idx) => (
+                  <div
+                    key={`num-${idx}`}
+                    style={{ marginBottom: 2, width: '100%' }}
+                  >
+                    {renderLessonContent(lesson)}
+                  </div>
+                ))
+              : null}
+            <WeekLabel isNumerator={true} />
+          </div>
+          <div className="lesson-half denominator">
+            {denominatorLessons.length > 0
+              ? denominatorLessons.map((lesson, idx) => (
+                  <div
+                    key={`den-${idx}`}
+                    style={{ marginBottom: 2, width: '100%' }}
+                  >
+                    {renderLessonContent(lesson)}
+                  </div>
+                ))
+              : null}
+            <WeekLabel isNumerator={false} />
+          </div>
+        </div>
+      );
+    }
+
+    // Для нескольких преподавателей: цветные карточки на всю ширину
+    const renderLessons = (lessons: ScheduleItem[], isNumerator: boolean) => {
+      // Группируем по преподавателю
+      const lessonsByTeacher: Record<string, ScheduleItem[]> = {};
+      lessons.forEach((lesson) => {
+        const uuid = lesson.__teacherUuid ?? '';
+        if (!lessonsByTeacher[uuid]) lessonsByTeacher[uuid] = [];
+        lessonsByTeacher[uuid].push(lesson);
+      });
+
+      // Если нет ни одной пары ничего не рендерим
+      const hasAny = selectedTeachers.some(
+        (teacherUuid) => (lessonsByTeacher[teacherUuid] || []).length > 0
+      );
+      if (!hasAny) return null;
+
+      // Индикатор недели для карточки
+      const weekLabel = <WeekLabel isNumerator={isNumerator} />;
+
+      return (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            width: '100%',
+            padding: 0,
+            margin: 0,
+          }}
+        >
+          {selectedTeachers.map((teacherUuid) =>
+            (lessonsByTeacher[teacherUuid] || []).map((lesson, idx) => (
+              <div
+                key={`${teacherUuid}-${idx}`}
+                style={{
+                  margin: 0,
+                  width: '100%',
+                  padding: 0,
+                  position: 'relative',
+                }}
+              >
+                {renderColoredLessonCard(
+                  lesson,
+                  idx === 0 &&
+                    Object.values(lessonsByTeacher)
+                      .flat()
+                      .findIndex((l) => l === lesson) === 0
+                    ? weekLabel
+                    : undefined
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      );
+    };
+
+    // Если обе половины пустые ничего не показываем
+    const hasNumerator =
+      numeratorLessons.length > 0 &&
+      selectedTeachers.some(
+        (teacherUuid) =>
+          numeratorLessons.filter((l) => l.__teacherUuid === teacherUuid)
+            .length > 0
+      );
+    const hasDenominator =
+      denominatorLessons.length > 0 &&
+      selectedTeachers.some(
+        (teacherUuid) =>
+          denominatorLessons.filter((l) => l.__teacherUuid === teacherUuid)
+            .length > 0
+      );
+    if (!hasNumerator && !hasDenominator) {
+      return null;
+    }
+
+    return (
+      <div className="combined-lesson-card">
+        <div className="lesson-half numerator">
+          {hasNumerator ? renderLessons(numeratorLessons, true) : null}
+        </div>
+        <div className="lesson-half denominator">
+          {hasDenominator ? renderLessons(denominatorLessons, false) : null}
         </div>
       </div>
     );
@@ -421,20 +789,35 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
               <td className="time-cell">{timeSlot.time}</td>
               {DAYS.map((day) => (
                 <td key={day.id} className="schedule-cell">
-                  {displayMode === 'combined'
+                  {selectedTeachers.length <= 1
+                    ? displayMode === 'combined'
+                      ? renderCombinedCell(day.id, timeSlot.slot)
+                      : weekType &&
+                        organizedSchedule[weekType as 'ch' | 'zn'][day.id]?.[
+                          timeSlot.slot
+                        ]?.map((lesson, idx) => (
+                          <React.Fragment
+                            key={`${weekType}-${day.id}-${
+                              timeSlot.slot
+                            }-${idx}-${lesson.id || 'noid'}`}
+                          >
+                            {renderLessonContent(lesson)}
+                          </React.Fragment>
+                        ))
+                    : displayMode === 'combined'
                     ? renderCombinedCell(day.id, timeSlot.slot)
                     : weekType &&
-                      organizedSchedule[weekType as 'ch' | 'zn'][day.id]?.[
-                        timeSlot.slot
-                      ]?.map((lesson, idx) => (
-                        <React.Fragment
-                          key={`${weekType}-${day.id}-${timeSlot.slot}-${idx}-${
-                            lesson.id || 'noid'
-                          }`}
-                        >
-                          {renderLessonContent(lesson)}
-                        </React.Fragment>
-                      ))}
+                      organizedSchedule[weekType][day.id]?.[timeSlot.slot]?.map(
+                        (lesson, idx) => (
+                          <React.Fragment
+                            key={`${weekType}-${day.id}-${
+                              timeSlot.slot
+                            }-${idx}-${lesson.id || 'noid'}`}
+                          >
+                            {renderColoredLessonCard(lesson)}
+                          </React.Fragment>
+                        )
+                      )}
                 </td>
               ))}
             </tr>
@@ -443,58 +826,6 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
       </table>
     </div>
   );
-
-  const renderCombinedCell = (dayId: number, timeSlot: number) => {
-    const numeratorLessons = organizedSchedule.ch[dayId]?.[timeSlot] || [];
-    const denominatorLessons = organizedSchedule.zn[dayId]?.[timeSlot] || [];
-
-    if (!numeratorLessons.length && !denominatorLessons.length) {
-      return (
-        <div className="combined-lesson-card no-lesson">
-          <div className="lesson-half no-lesson-cell">
-            <span className="no-lesson-text">—</span>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="combined-lesson-card teacher-combined-highlight">
-        <div className="lesson-half numerator">
-          {numeratorLessons.length > 0 ? (
-            <>
-              {numeratorLessons.map((lesson, idx) => (
-                <React.Fragment
-                  key={`num-${dayId}-${timeSlot}-${idx}-${lesson.id || 'noid'}`}
-                >
-                  {renderLessonContent(lesson, true)}
-                </React.Fragment>
-              ))}
-              <WeekLabel isNumerator={true} />
-            </>
-          ) : (
-            <span className="no-lesson-text">—</span>
-          )}
-        </div>
-        <div className="lesson-half denominator">
-          {denominatorLessons.length > 0 ? (
-            <>
-              {denominatorLessons.map((lesson, idx) => (
-                <React.Fragment
-                  key={`den-${dayId}-${timeSlot}-${idx}-${lesson.id || 'noid'}`}
-                >
-                  {renderLessonContent(lesson, true)}
-                </React.Fragment>
-              ))}
-              <WeekLabel isNumerator={false} />
-            </>
-          ) : (
-            <span className="no-lesson-text">—</span>
-          )}
-        </div>
-      </div>
-    );
-  };
 
   const WeekLabel: React.FC<{ isNumerator: boolean }> = ({ isNumerator }) => (
     <Tag className="week-label" color={isNumerator ? 'blue' : 'green'}>
@@ -523,52 +854,90 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
 
   // Экспорт в Excel
   const handleExportToExcel = useCallback(async () => {
-    if (!selectedTeacher) {
-      message.warning('Выберите преподавателя для экспорта');
+    if (selectedTeachers.length === 0) {
+      message.warning('Выберите хотя бы одного преподавателя для экспорта');
       return;
     }
     try {
-      const teacherObj = teachers.find((t) => t.uuid === selectedTeacher);
-      const teacherName = teacherObj
-        ? `${teacherObj.lastName} ${teacherObj.firstName} ${teacherObj.middleName}`.replace(
-            /\s+/g,
-            ' '
-          )
-        : 'Преподаватель';
-
       let wb;
       let filename;
+      const teacherNames = selectedTeachers
+        .map(
+          (uuid) =>
+            teachers.find((t) => t.uuid === uuid)?.lastName +
+            ' ' +
+            teachers.find((t) => t.uuid === uuid)?.firstName +
+            ' ' +
+            teachers.find((t) => t.uuid === uuid)?.middleName
+        )
+        .filter(Boolean)
+        .join('_');
       const timestamp = dayjs().format('DD-MM-YYYY');
 
-      if (displayMode === 'separate') {
-        // Экспорт только выбранной недели
-        wb = await generateTeacherExcelWorkbookForWeek(
-          teacherName,
-          selectedWeekType,
-          teacherScheduleMap,
-          groups
-        );
-        filename = `Расписание_${teacherName}_${
-          selectedWeekType === 'ch' ? 'Числитель' : 'Знаменатель'
-        }_${timestamp}.xlsx`;
+      if (selectedTeachers.length === 1) {
+        const teacherObj = teachers.find((t) => t.uuid === selectedTeachers[0]);
+        const teacherName = teacherObj
+          ? `${teacherObj.lastName} ${teacherObj.firstName} ${teacherObj.middleName}`.replace(
+              /\s+/g,
+              ' '
+            )
+          : 'Преподаватель';
+
+        if (displayMode === 'separate') {
+          // Для одного преподавателя в раздельном режиме экспортировать только одну неделю
+          wb = await generateMultiTeacherExcelWorkbook(
+            [selectedTeachers[0]],
+            teachers,
+            {
+              ...teacherScheduleMap,
+              ch: selectedWeekType === 'ch' ? teacherScheduleMap.ch : {},
+              zn: selectedWeekType === 'zn' ? teacherScheduleMap.zn : {},
+            },
+            groups
+          );
+          filename = `Расписание_${teacherName}_${
+            selectedWeekType === 'ch' ? 'Числитель' : 'Знаменатель'
+          }_${timestamp}.xlsx`;
+        } else {
+          wb = await generateTeacherExcelWorkbook(
+            teacherName,
+            teacherScheduleMap,
+            groups
+          );
+          filename = `Расписание_${teacherName}_${timestamp}.xlsx`;
+        }
       } else {
-        // Старый экспорт для объединённого вида
-        wb = await generateTeacherExcelWorkbook(
-          teacherName,
-          teacherScheduleMap,
-          groups
-        );
-        filename = `Расписание_${teacherName}_${timestamp}.xlsx`;
+        if (displayMode === 'separate') {
+          wb = await generateMultiTeacherExcelWorkbook(
+            selectedTeachers,
+            teachers,
+            {
+              ch: selectedWeekType === 'ch' ? teacherScheduleMap.ch : {},
+              zn: selectedWeekType === 'zn' ? teacherScheduleMap.zn : {},
+            },
+            groups
+          );
+          filename = `Расписание_${teacherNames}_${
+            selectedWeekType === 'ch' ? 'Числитель' : 'Знаменатель'
+          }_${timestamp}.xlsx`;
+        } else {
+          wb = await generateMultiTeacherExcelWorkbook(
+            selectedTeachers,
+            teachers,
+            teacherScheduleMap,
+            groups
+          );
+          filename = `Расписание_${teacherNames}_${timestamp}.xlsx`;
+        }
       }
 
       await downloadExcel(wb, filename);
       message.success('Расписание успешно экспортировано');
-    } catch (error) {
-      console.error('Export failed:', error);
+    } catch {
       message.error('Не удалось экспортировать расписание');
     }
   }, [
-    selectedTeacher,
+    selectedTeachers,
     teachers,
     teacherScheduleMap,
     groups,
@@ -602,6 +971,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
             .getAllGroups()
             .then(setGroups)
             .catch(() => {});
+          CacheService.remove('teachers');
         }}
       />
       <Card className="schedule-controls-card">
@@ -653,7 +1023,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
               <Button
                 icon={<DownloadOutlined />}
                 onClick={handleExportToExcel}
-                disabled={!selectedTeacher}
+                disabled={selectedTeachers.length === 0}
               >
                 Экспорт в Excel
               </Button>
@@ -671,25 +1041,44 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                 <InfoCircleOutlined style={{ color: '#1677ff' }} />
               </Tooltip>
             </Space>
-
             <Select
+              mode="multiple"
               showSearch
               style={{ width: '100%' }}
               placeholder="Выберите преподавателя"
               optionFilterProp="label"
-              value={selectedTeacher}
-              onChange={setSelectedTeacher}
+              value={selectedTeachers}
+              onChange={setSelectedTeachers}
               filterOption={filterTeacher}
               notFoundContent="Ничего не нашлось"
               loading={loading}
               options={getTeacherOptions()}
+              maxTagCount={3}
+              maxTagPlaceholder={(omitted) => `+${omitted.length} ещё`}
+              tagRender={(props) => {
+                const { value, label, closable, onClose } = props;
+                const color = getTeacherColor((value as string) ?? '');
+                return (
+                  <Tag
+                    color={color}
+                    closable={closable}
+                    onClose={onClose}
+                    style={{
+                      margin: '2px',
+                      color: '#fff',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {label}
+                  </Tag>
+                );
+              }}
             />
           </Space>
         </Space>
       </Card>
-
       <Spin spinning={loading}>
-        {selectedTeacher ? (
+        {selectedTeachers.length > 0 ? (
           <div
             className={`schedule-container ${
               useShortNames ? 'use-short-names' : ''

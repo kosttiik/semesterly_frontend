@@ -1,6 +1,9 @@
 import ExcelJS from 'exceljs';
-import { ScheduleItem, Group } from '../types/schedule';
+import { ScheduleItem as OrigScheduleItem, Group } from '../types/schedule';
 import { DAYS, TIME_SLOTS } from './constants';
+
+// Добавить локальное расширение типа для поддержки __teacherUuid
+type ScheduleItem = OrigScheduleItem & { __teacherUuid?: string };
 
 interface ScheduleMap {
   [weekType: string]: {
@@ -382,7 +385,7 @@ export async function generateTeacherExcelWorkbook(
     footer: 0,
   };
 
-  // Заголовок
+  // Заголовок (7 столбцов)
   worksheet.mergeCells('A1', 'G1');
   const titleCell = worksheet.getCell('A1');
   titleCell.value = `Расписание преподавателя: ${teacherName}`;
@@ -429,7 +432,7 @@ export async function generateTeacherExcelWorkbook(
     };
   });
 
-  // Сбор данных для строк
+  // Экспорт обеих недель (числитель и знаменатель)
   const weekTypes = [
     { key: 'ch', label: 'ЧС', color: 'FFe6f7ff' },
     { key: 'zn', label: 'ЗН', color: 'FFf6ffed' },
@@ -492,19 +495,22 @@ export async function generateTeacherExcelWorkbook(
     });
   }
 
-  // Область печати
   worksheet.pageSetup.printArea = `A1:G${worksheet.rowCount}`;
-
   workbook.created = new Date();
   workbook.modified = new Date();
 
   return workbook;
 }
 
-export async function generateTeacherExcelWorkbookForWeek(
-  teacherName: string,
-  weekType: 'ch' | 'zn',
-  scheduleMap: {
+export async function generateMultiTeacherExcelWorkbook(
+  selectedTeacherUuids: string[],
+  teachers: Array<{
+    uuid: string;
+    lastName: string;
+    firstName: string;
+    middleName: string;
+  }>,
+  teacherScheduleMap: {
     ch: { [day: number]: { [slot: number]: ScheduleItem[] } };
     zn: { [day: number]: { [slot: number]: ScheduleItem[] } };
     [key: string]: { [day: number]: { [slot: number]: ScheduleItem[] } };
@@ -535,20 +541,10 @@ export async function generateTeacherExcelWorkbookForWeek(
     footer: 0,
   };
 
-  // Заголовок
-  worksheet.mergeCells('A1', 'G1');
-  const titleCell = worksheet.getCell('A1');
-  titleCell.value = `Расписание преподавателя: ${teacherName} (${
-    weekType === 'ch' ? 'Числитель' : 'Знаменатель'
-  })`;
-  titleCell.font = { size: 14, bold: true };
-  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  worksheet.getRow(1).height = 28;
-
-  // Шапка таблицы
   const headers = [
     { name: 'День', width: 12 },
     { name: 'Время', width: 13 },
+    { name: 'Неделя', width: 9 },
     { name: 'Дисциплина', width: 32 },
     { name: 'Тип', width: 12 },
     { name: 'Группы', width: 22 },
@@ -561,63 +557,43 @@ export async function generateTeacherExcelWorkbookForWeek(
     },
   }));
 
-  const headerRow = worksheet.addRow(headers.map((h) => h.name));
-  headerRow.font = { bold: true, size: 10 };
-  headerRow.alignment = {
-    vertical: 'middle',
-    horizontal: 'center',
-    wrapText: true,
-  };
-  headerRow.height = 22;
-  headerRow.eachCell((cell) => {
-    cell.fill = {
+  let rowIdx = 1;
+  selectedTeacherUuids.forEach((teacherUuid, idx) => {
+    const teacher = teachers.find((t) => t.uuid === teacherUuid);
+    const teacherName = teacher
+      ? `${teacher.lastName} ${teacher.firstName} ${teacher.middleName}`.replace(
+          /\s+/g,
+          ' '
+        )
+      : '';
+    worksheet.mergeCells(`A${rowIdx}:G${rowIdx}`);
+    const titleCell = worksheet.getCell(`A${rowIdx}`);
+    titleCell.value = `Преподаватель: ${teacherName}`;
+    titleCell.font = { size: 14, bold: true };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    titleCell.fill = {
       type: 'pattern',
       pattern: 'solid',
-      fgColor: { argb: 'FFF5F5F5' },
+      fgColor: { argb: GROUP_COLORS[idx % GROUP_COLORS.length].light },
     };
-    cell.border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'thin' },
-      right: { style: 'thin' },
-    };
-  });
+    worksheet.getRow(rowIdx).height = 28;
+    rowIdx++;
 
-  // Сбор данных для строк
-  for (const day of DAYS) {
-    for (const slot of TIME_SLOTS) {
-      const lessons: ScheduleItem[] =
-        scheduleMap[weekType][day.id]?.[slot.slot] || [];
-      for (const lesson of lessons) {
-        const discipline = lesson.disciplines[0];
-        const groupNames = lesson.groups
-          .map((g) => groups.find((gr) => gr.uuid === g.uuid)?.name || g.name)
-          .join(', ');
-        const location = lesson.audiences
-          .map((a) => `${a.building}-${a.name}`)
-          .join(', ');
-        worksheet.addRow([
-          day.name,
-          slot.time,
-          discipline?.fullName || 'Нет названия',
-          translateActivityType(discipline?.actType || 'н/д'),
-          groupNames,
-          location,
-        ]);
-      }
-    }
-  }
-
-  // Стилизация строк
-  for (let i = 3; i <= worksheet.rowCount; i++) {
-    const row = worksheet.getRow(i);
-    row.height = 22;
-    row.eachCell((cell, col) => {
-      cell.font = { size: 9 };
+    // Шапка таблицы
+    const headerRow = worksheet.getRow(rowIdx);
+    headers.forEach((h, i) => {
+      const cell = headerRow.getCell(i + 1);
+      cell.value = h.name;
+      cell.font = { bold: true, size: 10 };
       cell.alignment = {
         vertical: 'middle',
-        horizontal: col === 3 ? 'left' : 'center',
+        horizontal: 'center',
         wrapText: true,
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF5F5F5' },
       };
       cell.border = {
         top: { style: 'thin' },
@@ -626,29 +602,113 @@ export async function generateTeacherExcelWorkbookForWeek(
         right: { style: 'thin' },
       };
     });
-  }
+    worksheet.getRow(rowIdx).height = 22;
+    rowIdx++;
 
-  // Область печати
-  worksheet.pageSetup.printArea = `A1:F${worksheet.rowCount}`;
+    // ОБЕ недели
+    const weekTypes = [
+      { key: 'ch', label: 'ЧС' },
+      { key: 'zn', label: 'ЗН' },
+    ];
+    let hasLessons = false;
+    for (const week of weekTypes) {
+      for (const day of DAYS) {
+        for (const slot of TIME_SLOTS) {
+          const lessons: ScheduleItem[] =
+            teacherScheduleMap[week.key][day.id]?.[slot.slot]?.filter(
+              (l) => l.__teacherUuid === teacherUuid
+            ) || [];
+          for (const lesson of lessons) {
+            hasLessons = true;
+            const discipline = lesson.disciplines[0];
+            const groupNames = lesson.groups
+              .map(
+                (g) => groups.find((gr) => gr.uuid === g.uuid)?.name || g.name
+              )
+              .join(', ');
+            const location = lesson.audiences
+              .map((a) => `${a.building}-${a.name}`)
+              .join(', ');
+            const row = worksheet.getRow(rowIdx);
+            row.getCell(1).value = day.name;
+            row.getCell(2).value = slot.time;
+            row.getCell(3).value = week.label;
+            row.getCell(4).value = discipline?.fullName || 'Нет названия';
+            row.getCell(5).value = translateActivityType(
+              discipline?.actType || 'н/д'
+            );
+            row.getCell(6).value = groupNames;
+            row.getCell(7).value = location;
+            row.height = 22;
+            for (let col = 1; col <= 7; col++) {
+              const cell = row.getCell(col);
+              cell.font = { size: 9 };
+              cell.alignment = {
+                vertical: 'middle',
+                horizontal: col === 4 ? 'left' : 'center',
+                wrapText: true,
+              };
+              cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' },
+              };
+              if (col === 3) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: {
+                    argb: week.key === 'ch' ? 'FFe6f7ff' : 'FFf6ffed',
+                  },
+                };
+              }
+            }
+            rowIdx++;
+          }
+        }
+      }
+    }
+    if (!hasLessons) {
+      const row = worksheet.getRow(rowIdx);
+      row.getCell(1).value = 'Нет занятий';
+      row.getCell(1).font = {
+        italic: true,
+        size: 10,
+        color: { argb: 'FF888888' },
+      };
+      row.height = 20;
+      rowIdx++;
+    }
+    rowIdx++;
+  });
 
+  worksheet.pageSetup.printArea = `A1:G${worksheet.rowCount}`;
   workbook.created = new Date();
   workbook.modified = new Date();
 
   return workbook;
 }
 
+export async function downloadExcel(
+  workbook: ExcelJS.Workbook,
+  filename: string
+): Promise<void> {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
+// Экспорт расписания групп для одной недели (экспорт для ScheduleViewer)
 export async function generateExcelWorkbookForWeek(
-  scheduleMap: {
-    ch: {
-      [day: number]: { [slot: number]: { [groupId: string]: ScheduleItem[] } };
-    };
-    zn: {
-      [day: number]: { [slot: number]: { [groupId: string]: ScheduleItem[] } };
-    };
-    [key: string]: {
-      [day: number]: { [slot: number]: { [groupId: string]: ScheduleItem[] } };
-    };
-  },
+  scheduleMap: ScheduleMap,
   selectedGroups: string[],
   groups: Group[],
   weekType: 'ch' | 'zn'
@@ -857,20 +917,4 @@ export async function generateExcelWorkbookForWeek(
   )}${worksheet.rowCount}`;
 
   return workbook;
-}
-
-export async function downloadExcel(
-  workbook: ExcelJS.Workbook,
-  filename: string
-): Promise<void> {
-  const buffer = await workbook.xlsx.writeBuffer();
-  const blob = new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  });
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  window.URL.revokeObjectURL(url);
 }
