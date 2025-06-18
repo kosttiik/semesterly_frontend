@@ -1053,8 +1053,6 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
               notFoundContent="Ничего не нашлось"
               loading={loading}
               options={getTeacherOptions()}
-              maxTagCount={3}
-              maxTagPlaceholder={(omitted) => `+${omitted.length} ещё`}
               tagRender={(props) => {
                 const { value, label, closable, onClose } = props;
                 const color = getTeacherColor((value as string) ?? '');
@@ -1073,6 +1071,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
                   </Tag>
                 );
               }}
+              className="teacher-select-multiline"
             />
           </Space>
         </Space>
