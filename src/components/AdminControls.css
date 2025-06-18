@@ -25,23 +25,3 @@
 .admin-control-progress {
   animation: fadeIn 0.3s ease;
 }
-
-.ant-modal-enter {
-  transform: translateY(20px);
-  opacity: 0;
-}
-
-.ant-modal-enter-active {
-  transform: translateY(0);
-  opacity: 1;
-  transition: all 0.3s ease-out;
-}
-
-.ant-modal-mask-enter {
-  opacity: 0;
-}
-
-.ant-modal-mask-enter-active {
-  opacity: 1;
-  transition: opacity 0.3s ease-out;
-}

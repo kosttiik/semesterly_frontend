@@ -28,7 +28,6 @@ const CurrentWeekIndicator: React.FC = () => {
         setCurrentDate(dayjs(weekInfo.date).format('DD MMMM YYYY'));
       } catch (error) {
         console.error('Failed to fetch week info:', error);
-        // Fallback to client-side calculation
         const now = dayjs();
         const weekNum = now.isoWeek();
         setWeekNumber(weekNum);
@@ -41,7 +40,6 @@ const CurrentWeekIndicator: React.FC = () => {
 
     fetchWeekInfo();
 
-    // Update every hour
     const interval = setInterval(fetchWeekInfo, 3600000);
     return () => clearInterval(interval);
   }, []);

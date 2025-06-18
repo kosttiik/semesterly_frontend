@@ -25,23 +25,21 @@ import {
   CompressOutlined,
   ExpandOutlined,
   SettingOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons';
-import {
-  ScheduleItem,
-  Group,
-  Teacher,
-  TimeSlot,
-  DayOfWeek,
-} from '../types/schedule';
+import { ScheduleItem, Group, Teacher, TimeSlot } from '../types/schedule';
 import { scheduleService } from '../services/scheduleService';
 import { parseTime } from '../utils/timeUtils';
 import dayjs from 'dayjs';
-import CacheService from '../services/cacheService';
 import AdminControls from './AdminControls';
+import { DAYS, TIME_SLOTS } from '../utils/constants';
+import { generateExcelWorkbook, downloadExcel } from '../utils/excelExport';
+import CacheService from '../services/cacheService';
 
 const { Title } = Typography;
 
-const DROPDOWN_ITEM_HEIGHT = 32; // height of each dropdown item in pixels
+// Базовая высота элемента выпадающего списка
+const DROPDOWN_ITEM_HEIGHT = 32;
 
 type CustomTagProps = Parameters<NonNullable<SelectProps['tagRender']>>[0];
 
@@ -51,9 +49,23 @@ interface ScheduleViewerProps {
   setDisplayMode: (mode: 'separate' | 'combined') => void;
 }
 
-// Define ScheduleMap type for memoized data structure
+// Определение типа ScheduleMap для мемоизированной структуры данных
 interface ScheduleMap {
-  [weekType: string]: {
+  ch: {
+    [day: number]: {
+      [timeSlot: number]: {
+        [groupId: string]: ScheduleItem[];
+      };
+    };
+  };
+  zn: {
+    [day: number]: {
+      [timeSlot: number]: {
+        [groupId: string]: ScheduleItem[];
+      };
+    };
+  };
+  [key: string]: {
     [day: number]: {
       [timeSlot: number]: {
         [groupId: string]: ScheduleItem[];
@@ -62,31 +74,13 @@ interface ScheduleMap {
   };
 }
 
-const DAYS: DayOfWeek[] = [
-  { id: 1, name: 'Понедельник' },
-  { id: 2, name: 'Вторник' },
-  { id: 3, name: 'Среда' },
-  { id: 4, name: 'Четверг' },
-  { id: 5, name: 'Пятница' },
-  { id: 6, name: 'Суббота' },
-];
-
-const TIME_SLOTS: TimeSlot[] = [
-  { slot: 1, time: '08:30-10:00' },
-  { slot: 2, time: '10:10-11:40' },
-  { slot: 3, time: '11:50-13:20' },
-  { slot: 4, time: '14:05-15:35' },
-  { slot: 5, time: '15:50-17:20' },
-  { slot: 6, time: '17:30-19:00' },
-  { slot: 7, time: '19:10-20:40' },
-];
-
+// Цвета для групп в расписании
 const GROUP_COLORS = [
-  '#1677ff', // blue
-  '#f5222d', // red
-  '#722ed1', // purple
-  '#52c41a', // green
-  '#fa8c16', // orange
+  '#1677ff', // синий
+  '#f5222d', // красный
+  '#722ed1', // фиолетовый
+  '#52c41a', // зеленый
+  '#fa8c16', // оранжевый
 ] as const;
 
 const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
@@ -94,7 +88,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
   displayMode,
   setDisplayMode,
 }) => {
-  // State management
+  // Управление состоянием
   const [selectedGroups, setSelectedGroups] =
     useState<string[]>(initialGroupIds);
   const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
@@ -103,15 +97,15 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     'idle' | 'loading' | 'success' | 'error'
   >('idle');
   const [groups, setGroups] = useState<Group[]>([]);
-  const [, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [useShortNames, setUseShortNames] = useState(false);
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
+  const [selectedWeekType, setSelectedWeekType] = useState<'ch' | 'zn'>('ch'); // новое состояние
 
-  // Keep track of fetched schedules
+  // Отслеживание загруженных расписаний
   const fetchedSchedules = useRef<Set<string>>(new Set());
 
-  // Memoized schedule map for performance
+  // Мемоизированная структура данных для эффективной работы с расписанием
   const scheduleMap = useMemo<ScheduleMap>(() => {
     const map: ScheduleMap = { ch: {}, zn: {} };
     ['ch', 'zn'].forEach((weekType) => {
@@ -121,7 +115,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         TIME_SLOTS.forEach((timeSlot) => {
           map[weekType][day.id][timeSlot.slot] = {};
           selectedGroups.forEach((groupId) => {
-            // Get all lessons for this time slot and filter for shared lessons
+            // Получение всех занятий для данного временного интервала и фильтрация для общих занятий
             const lessons = scheduleData.filter(
               (item) =>
                 item.day === day.id &&
@@ -130,7 +124,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                 item.groups.some((g) => g.uuid === groupId)
             );
 
-            // Create a map of unique lessons using a composite key
+            // Создание карты уникальных занятий с использованием составного ключа
             const uniqueLessons = lessons.reduce((acc, lesson) => {
               const key = `${lesson.disciplines[0]?.fullName}_${lesson.teachers
                 .map((t) => t.id)
@@ -151,7 +145,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     return map;
   }, [scheduleData, selectedGroups]);
 
-  // Consistent group color assignment
+  // Получение цвета для группы, сохраняя последовательность
   const getGroupColor = useCallback(
     (groupId: string, selectedGroups: string[]): string => {
       const index = selectedGroups.indexOf(groupId);
@@ -160,21 +154,26 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     []
   );
 
-  // Fetch groups
-  const fetchGroups = useCallback(async () => {
-    console.log('Fetching groups...');
+  // Получение групп
+  const fetchGroups = useCallback(async (forceRefresh = false) => {
     setGroupsStatus('loading');
-    setError(null);
     setGroups([]);
 
-    // Clear groups cache specifically
-    CacheService.remove('groups');
-
     try {
-      const fetchedGroups = await scheduleService.getAllGroups();
+      if (forceRefresh) {
+        if (typeof scheduleService.clearGroupsCache === 'function') {
+          scheduleService.clearGroupsCache();
+        }
+      }
+      let fetchedGroups: Group[];
+      if (forceRefresh) {
+        CacheService.remove('groups');
+        fetchedGroups = await scheduleService.getAllGroups();
+      } else {
+        fetchedGroups = await scheduleService.getAllGroups();
+      }
 
       if (fetchedGroups.length === 0) {
-        setError('Нет доступных групп');
         setGroupsStatus('error');
         return;
       }
@@ -182,13 +181,18 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       setGroupsStatus('success');
     } catch (err) {
       console.error('Failed to fetch groups:', err);
-      setError('Ошибка загрузки групп');
       setGroupsStatus('error');
       message.error('Не удалось загрузить список групп');
     }
   }, []);
 
-  // Optimized schedule data fetching
+  // Первоначальная загрузка групп
+  useEffect(() => {
+    fetchGroups(true); // Always force fetch on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Оптимизированная загрузка данных расписания
   const fetchScheduleData = useCallback(
     async (forceRefresh = false) => {
       if (selectedGroups.length === 0) {
@@ -198,7 +202,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
       setLoading(true);
       try {
-        // If force refresh, clear cache for selected groups
+        // Если принудительное обновление, очистить кэш для выбранных групп
         if (forceRefresh) {
           selectedGroups.forEach((groupId) => {
             fetchedSchedules.current.delete(groupId);
@@ -232,32 +236,20 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     [selectedGroups]
   );
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      scheduleService.clearScheduleCache();
-    };
-  }, []);
-
-  // Initial group fetch
-  useEffect(() => {
-    if (groupsStatus === 'idle') fetchGroups();
-  }, [fetchGroups, groupsStatus]);
-
-  // Fetch schedule when groups change
+  // Загрузка расписания при изменении групп
   useEffect(() => {
     if (groupsStatus === 'success' && selectedGroups.length > 0)
       fetchScheduleData();
   }, [selectedGroups, groupsStatus, fetchScheduleData]);
 
-  // Handle group selection changes
+  // Обработка изменений в выборе групп
   const handleGroupChange = useCallback(
     (selectedIds: string[]) => {
       const removedGroups = selectedGroups.filter(
         (id) => !selectedIds.includes(id)
       );
 
-      // Clear cache for removed groups
+      // Очистка кэша для удаленных групп
       removedGroups.forEach((groupId) => {
         fetchedSchedules.current.delete(groupId);
         scheduleService.clearScheduleCache(groupId);
@@ -265,7 +257,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
       setSelectedGroups(selectedIds);
 
-      // Update schedule data immediately for removals
+      // Немедленное обновление данных расписания для удаленных групп
       setScheduleData((prevData) =>
         prevData.filter((item) =>
           selectedIds.some((groupId) =>
@@ -277,30 +269,30 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     [selectedGroups]
   );
 
-  // Activity type colors
+  // Цвета для разных типов занятий
   const getActivityTypeColor = (actType: string): string =>
     ({
-      // Russian variants
+      // Русские варианты
       лекция: 'blue',
       'лаб. работа': 'purple',
       'практ. работа': 'green',
       семинар: 'orange',
       зачёт: 'gold',
       экзамен: 'red',
-      // English variants - map to same colors
+      // Английские варианты
       lecture: 'blue',
       laboratory: 'purple',
       practice: 'green',
       seminar: 'orange',
       credit: 'gold',
       exam: 'red',
-      // Handle full forms too
+      // Полные формы
       лабораторная: 'purple',
       практика: 'green',
-      зачет: 'gold', // Handle both with and without ё
+      зачет: 'gold',
     }[actType.toLowerCase()] || 'default');
 
-  // Add this translation function near the other utility functions
+  // Перевод типов занятий
   const translateActivityType = (actType: string): string =>
     ({
       lecture: 'лекция',
@@ -309,10 +301,9 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
       seminar: 'семинар',
       credit: 'зачёт',
       exam: 'экзамен',
-      // Add any other translations needed
     }[actType.toLowerCase()] || actType);
 
-  // Current time highlighting
+  // Текущий день и время для подсветки
   const currentDayIndex = dayjs().day();
   const currentTimeIndex = TIME_SLOTS.findIndex((slot) => {
     const [start, end] = slot.time.split('-').map((t) => parseTime(t));
@@ -320,7 +311,6 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     return now.isAfter(start) && now.isBefore(end);
   });
 
-  // Helper function to format teacher name - simplified to last name and initials only
   const formatTeacherFullName = (teacher: Teacher): string => {
     return `${teacher.lastName} ${teacher.firstName} ${teacher.middleName}`;
   };
@@ -329,14 +319,13 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     return `${teacher.lastName} ${teacher.firstName[0]}.${teacher.middleName[0]}.`;
   };
 
-  // Add this helper function after existing interfaces
+  // Метка недели (числитель/знаменатель)
   const WeekLabel: React.FC<{ isNumerator: boolean }> = ({ isNumerator }) => (
     <Tag className="week-label" color={isNumerator ? 'blue' : 'green'}>
       {isNumerator ? 'чс' : 'зн'}
     </Tag>
   );
 
-  // Update renderLessonContent for more compact layout
   const renderLessonContent = (lesson: ScheduleItem) => {
     if (!lesson) return null;
 
@@ -353,8 +342,8 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
                 <span className="full-name">{fullName || 'Нет названия'}</span>
                 <Tooltip
                   title={fullName}
-                  mouseEnterDelay={0.5}
-                  mouseLeaveDelay={0.1}
+                  mouseEnterDelay={0.1}
+                  mouseLeaveDelay={0.15}
                   placement="topLeft"
                 >
                   <span className="short-name">
@@ -380,9 +369,14 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
         </div>
         <Tooltip
           title={lesson.teachers.map(formatTeacherFullName).join('\n')}
-          mouseEnterDelay={0.5}
+          mouseEnterDelay={0.1}
           placement="topLeft"
-          overlayStyle={{ maxWidth: '100%', whiteSpace: 'pre-line' }}
+          styles={{
+            root: {
+              maxWidth: '100%',
+              whiteSpace: 'pre-line',
+            },
+          }}
         >
           <div className="lesson-teacher">
             {lesson.teachers.map(formatTeacherInitials).join(', ')}
@@ -442,7 +436,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
 
     return (
       <div
-        key={`${lesson.id}_${groupId}_${
+        key={`${lesson.id}_${groupId}__${
           lesson.disciplines[0]?.fullName
         }_${lesson.teachers.map((t) => t.id).join('_')}`}
         className="lesson-card"
@@ -456,7 +450,7 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     );
   };
 
-  // Render schedule table
+  // Отображение таблицы расписания
   const renderScheduleTable = (weekType?: 'ch' | 'zn') => (
     <div className="schedule-table-container">
       <table
@@ -527,12 +521,69 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
     </div>
   );
 
+  const handleExportToExcel = useCallback(async () => {
+    if (selectedGroups.length === 0) {
+      message.warning('Выберите хотя бы одну группу для экспорта');
+      return;
+    }
+
+    try {
+      let wb;
+      let filename;
+      const groupNames = selectedGroups
+        .map((id) => groups.find((g) => g.uuid === id)?.name)
+        .filter(Boolean)
+        .join('_');
+      const timestamp = dayjs().format('DD-MM-YYYY');
+
+      if (displayMode === 'separate') {
+        // Экспорт только выбранной недели
+        const { generateExcelWorkbookForWeek } = await import(
+          '../utils/excelExport'
+        );
+        wb = await generateExcelWorkbookForWeek(
+          scheduleMap,
+          selectedGroups,
+          groups,
+          selectedWeekType
+        );
+        filename = `Расписание_${groupNames}_${
+          selectedWeekType === 'ch' ? 'Числитель' : 'Знаменатель'
+        }_${timestamp}.xlsx`;
+      } else {
+        wb = await generateExcelWorkbook(scheduleMap, selectedGroups, groups);
+        filename = `Расписание_${groupNames}_${timestamp}.xlsx`;
+      }
+
+      await downloadExcel(wb, filename);
+      message.success('Расписание успешно экспортировано');
+    } catch (error) {
+      console.error('Export failed:', error);
+      message.error('Не удалось экспортировать расписание');
+    }
+  }, [scheduleMap, selectedGroups, groups, displayMode, selectedWeekType]);
+
+  // Обновить группы и преподавателей и сбросить их кэш
+  const handleRefreshGroups = useCallback(async () => {
+    if (typeof scheduleService.clearGroupsCache === 'function') {
+      scheduleService.clearGroupsCache();
+    }
+    CacheService.remove('teachers');
+    await fetchGroups(true);
+    message.success('Группы обновлены');
+  }, [fetchGroups]);
+
   return (
     <div className="schedule-viewer">
       <AdminControls
         isModalOpen={isAdminModalOpen}
         onModalOpen={() => setIsAdminModalOpen(true)}
         onModalClose={() => setIsAdminModalOpen(false)}
+        onDatabaseUpdated={() => fetchGroups(true)}
+        onDatabaseCleared={() => {
+          fetchGroups(true);
+          CacheService.remove('teachers');
+        }}
       />
       <Card className="schedule-controls-card">
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
@@ -588,13 +639,16 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
               >
                 {useShortNames ? 'Полные названия' : 'Сокращённые названия'}
               </Button>
-            </Space>
-            <Space>
               <Button
-                icon={<ReloadOutlined />}
-                onClick={() => fetchScheduleData(true)}
+                icon={<DownloadOutlined />}
+                onClick={handleExportToExcel}
                 disabled={selectedGroups.length === 0}
               >
+                Экспорт в Excel
+              </Button>
+            </Space>
+            <Space>
+              <Button icon={<ReloadOutlined />} onClick={handleRefreshGroups}>
                 Обновить
               </Button>
             </Space>
@@ -712,22 +766,23 @@ const ScheduleViewer: React.FC<ScheduleViewerProps> = ({
           >
             {displayMode === 'separate' ? (
               <Tabs
-                defaultActiveKey="numerator"
+                activeKey={selectedWeekType}
+                onChange={(key) => setSelectedWeekType(key as 'ch' | 'zn')}
                 type="card"
                 items={[
                   {
-                    key: 'numerator',
+                    key: 'ch',
                     label: 'Числитель',
                     children: renderScheduleTable('ch'),
                   },
                   {
-                    key: 'denominator',
+                    key: 'zn',
                     label: 'Знаменатель',
                     children: renderScheduleTable('zn'),
                   },
                 ]}
                 style={{
-                  marginBottom: '-1px', // Remove gap between tabs and table
+                  marginBottom: '-1px',
                   backgroundColor: '#fff',
                   borderTopLeftRadius: '8px',
                   borderTopRightRadius: '8px',

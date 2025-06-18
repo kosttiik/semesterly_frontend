@@ -1,0 +1,284 @@
+.teacher-schedule-viewer-root {
+  width: 100%;
+}
+
+.teacher-schedule-table-container {
+  margin-top: 18px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px #0001;
+  padding: 18px 12px 12px 12px;
+  overflow-x: auto;
+}
+
+.teacher-schedule-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 15px;
+}
+
+.teacher-schedule-table th,
+.teacher-schedule-table td {
+  border: 1px solid #e5e5e5;
+  padding: 6px 4px;
+  text-align: center;
+  vertical-align: top;
+  background: #fafbfc;
+}
+
+.teacher-schedule-table td {
+  text-align: left !important;
+  vertical-align: top;
+}
+
+.schedule-cell {
+  min-width: 120px;
+  max-width: 220px;
+  padding: 2px 2px !important;
+  background: #fff;
+  text-align: left !important;
+}
+
+.schedule-cell > * {
+  text-align: left !important;
+}
+
+.teacher-schedule-table th.teacher-time-column,
+.teacher-schedule-table td.teacher-time-cell {
+  background: #f0f2f5;
+  font-weight: 500;
+  min-width: 60px;
+  width: 60px;
+}
+
+.teacher-lesson-card {
+  background: #f6f8fa;
+  border-radius: 7px;
+  margin-bottom: 6px;
+  padding: 7px 8px 6px 8px;
+  box-shadow: 0 1px 3px #0001;
+  text-align: left;
+  font-size: 14px;
+  transition: box-shadow 0.2s;
+  border-left: 4px solid #1677ff22;
+  position: relative;
+}
+
+.teacher-lesson-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2px;
+}
+
+.teacher-lesson-name-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.teacher-full-name {
+  font-weight: 500;
+  font-size: 14px;
+  color: #222;
+  margin-bottom: 1px;
+}
+
+.teacher-short-name {
+  font-size: 13px;
+  color: #888;
+  font-style: italic;
+}
+
+.teacher-lesson-type {
+  margin-top: 2px;
+}
+
+.teacher-lesson-time {
+  font-size: 13px;
+  color: #555;
+  font-weight: 400;
+  margin-left: 8px;
+}
+
+.teacher-lesson-groups {
+  margin-top: 2px;
+  font-size: 13px;
+  color: #1677ff;
+}
+
+.teacher-lesson-location {
+  font-size: 12px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.teacher-combined-lesson-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 36px;
+  text-align: left !important;
+}
+
+.teacher-combined-lesson-card .teacher-lesson-half {
+  min-height: 18px;
+  padding: 0;
+  margin: 0;
+  text-align: left !important;
+  display: block;
+}
+
+.teacher-combined-lesson-card .teacher-numerator,
+.teacher-combined-lesson-card .teacher-denominator {
+  display: block;
+  width: 100%;
+  text-align: left !important;
+}
+
+.lesson-card {
+  text-align: left !important;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  word-break: break-word;
+  margin: 0 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  padding: 8px 10px 8px 10px !important;
+  position: relative;
+}
+
+.lesson-card > div,
+.lesson-card span,
+.lesson-card .short-name,
+.lesson-card .full-name {
+  min-width: 0;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.lesson-time {
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.week-label {
+  font-size: 11px !important;
+  margin-left: 4px;
+  margin-top: 2px;
+  padding: 0 6px !important;
+  border-radius: 6px !important;
+}
+
+.teacher-schedule-table-container.teacher-compact {
+  padding: 8px 2px 2px 2px;
+}
+
+.teacher-lesson-card.teacher-compact {
+  background: #f3f6fa;
+  border-radius: 5px;
+  margin-bottom: 2px;
+  padding: 3px 4px 2px 4px;
+  font-size: 13px;
+  border-left: 3px solid #1677ff22;
+  box-shadow: none;
+}
+
+.teacher-lesson-card.teacher-compact .teacher-lesson-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.teacher-lesson-card.teacher-compact .teacher-short-name {
+  font-weight: 500;
+  color: #222;
+  font-size: 13px;
+}
+
+.teacher-lesson-card.teacher-compact .teacher-lesson-row:last-child {
+  font-size: 12px;
+  color: #1677ff;
+  margin-top: 1px;
+}
+
+.teacher-combined-lesson-card.teacher-compact {
+  gap: 0;
+  min-height: 22px;
+}
+
+.teacher-combined-lesson-card.teacher-compact .teacher-lesson-half {
+  min-height: 10px;
+  padding: 0;
+  margin: 0;
+}
+
+.teacher-combined-lesson-card.teacher-compact .week-label {
+  font-size: 10px !important;
+  margin-left: 2px;
+  margin-top: 0;
+  padding: 0 4px !important;
+}
+
+.teacher-schedule-table-container.teacher-compact .teacher-lesson-time,
+.teacher-schedule-table-container.teacher-compact .teacher-lesson-location,
+.teacher-schedule-table-container.teacher-compact .teacher-full-name {
+  display: none !important;
+}
+
+.no-lesson-text {
+  display: block;
+  padding-left: 8px;
+  text-align: left !important;
+  width: 100%;
+}
+
+.schedule-cell,
+.schedule-cell > div {
+  text-align: left !important;
+}
+
+.teacher-combined-highlight,
+.teacher-combined-highlight * {
+  text-align: left !important;
+}
+
+/* Многострочное отображение тегов для Select преподавателей */
+.teacher-select-multiline .ant-select-selector {
+  min-height: 40px;
+  max-height: 100px;
+  overflow-y: auto;
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+  white-space: normal !important;
+}
+
+.teacher-select-multiline .ant-select-selection-overflow {
+  flex-wrap: wrap !important;
+  align-items: flex-start !important;
+  max-width: 100%;
+}
+
+.teacher-select-multiline .ant-select-selection-item {
+  margin: 2px 4px 2px 0 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.teacher-select-multiline .ant-tag {
+  margin: 0 !important;
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  font-weight: 500;
+  font-size: 14px;
+}

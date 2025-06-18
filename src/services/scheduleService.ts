@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { ScheduleItem, Group } from '../types/schedule';
+import { ScheduleItem, Group, Teacher } from '../types/schedule';
 import CacheService from './cacheService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api/v1';
@@ -39,45 +39,63 @@ class ScheduleService {
   }
 
   async getAllGroups(): Promise<Group[]> {
-    // Check cache first
     const cachedGroups = CacheService.get<Group[]>('groups');
     if (cachedGroups) {
       return cachedGroups;
     }
 
-    const { data } = await this.api.get<Group[]>('/get-groups');
+    const response = await fetchWithAuth(`${API_URL}/get-groups`);
+    const data = await response.json();
     const groups = Array.isArray(data) ? data : [];
 
-    // Cache the result
-    CacheService.set('groups', groups);
+    // Не кэшируем пустой массив групп
+    if (groups.length > 0) {
+      CacheService.set('groups', groups);
+    }
     return groups;
   }
 
   async getGroupSchedule(uuid: string): Promise<ScheduleItem[]> {
-    // Check memory cache first
-    const cachedSchedule = this.scheduleCache.get(uuid);
-    if (cachedSchedule) {
-      return cachedSchedule;
-    }
-
-    // Check localStorage cache
-    const cacheKey = `schedule_${uuid}`;
-    const cachedData = CacheService.get<ScheduleItem[]>(cacheKey);
-    if (cachedData) {
-      this.scheduleCache.set(uuid, cachedData);
-      return cachedData;
-    }
-
-    const { data } = await this.api.get<ScheduleItem[]>(
-      `/get-group-schedule/${uuid}`
+    const response = await fetchWithAuth(
+      `${API_URL}/get-group-schedule/${uuid}`
     );
+    const data = await response.json();
     const schedule = data || [];
 
-    // Cache in both memory and localStorage
     this.scheduleCache.set(uuid, schedule);
-    CacheService.set(cacheKey, schedule);
 
     return schedule;
+  }
+
+  async getAllTeachers(): Promise<Teacher[]> {
+    const cachedTeachers = CacheService.get<Teacher[]>('teachers');
+    if (cachedTeachers) {
+      return cachedTeachers;
+    }
+
+    const response = await fetchWithAuth(`${API_URL}/get-teachers`);
+    const data = await response.json();
+    const teachers = Array.isArray(data) ? data : [];
+
+    // Не кэшируем пустой массив преподавателей
+    if (teachers.length > 0) {
+      CacheService.set('teachers', teachers);
+    }
+    return teachers;
+  }
+
+  async getTeacherSchedule(uuid: string): Promise<ScheduleItem[]> {
+    const response = await fetchWithAuth(
+      `${API_URL}/get-teacher-schedule/${uuid}`
+    );
+    const data = await response.json();
+    const schedule = data || [];
+
+    return schedule;
+  }
+
+  clearGroupsCache(): void {
+    CacheService.remove('groups');
   }
 
   clearScheduleCache(uuid?: string): void {
@@ -86,7 +104,6 @@ class ScheduleService {
       CacheService.remove(`schedule_${uuid}`);
     } else {
       this.scheduleCache.clear();
-      // Clear all schedule-related items from localStorage
       Object.keys(localStorage)
         .filter((key) => key.startsWith('schedule_'))
         .forEach((key) => CacheService.remove(key));
@@ -113,6 +130,17 @@ class ScheduleService {
     const { data } = await this.lksApi.get<WeekInfo>('/schedules/current');
     return data;
   }
+}
+
+async function fetchWithAuth(url: string, options: RequestInit = {}) {
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: {
+      ...options.headers,
+      'Content-Type': 'application/json',
+    },
+  });
 }
 
 export const scheduleService = new ScheduleService();
