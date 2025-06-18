@@ -690,6 +690,364 @@ export async function generateMultiTeacherExcelWorkbook(
   return workbook;
 }
 
+/**
+ * Экспорт сводной таблицы преподавателей (пересечения преподавателей и дней/пар)
+ * Формат: строки — пары (день+время), столбцы — преподаватели, ячейки — информация о занятии
+ */
+export async function exportTeacherPivotTable({
+  teachers,
+  scheduleMap,
+  groups,
+  weekType,
+}: {
+  teachers: Array<{
+    uuid: string;
+    lastName: string;
+    firstName: string;
+    middleName: string;
+  }>;
+  scheduleMap: {
+    ch: { [day: number]: { [slot: number]: ScheduleItem[] } };
+    zn: { [day: number]: { [slot: number]: ScheduleItem[] } };
+    [key: string]: { [day: number]: { [slot: number]: ScheduleItem[] } };
+  };
+  groups: Group[];
+  weekType?: 'ch' | 'zn';
+}): Promise<ExcelJS.Workbook> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Semesterly';
+  workbook.lastModifiedBy = 'Semesterly';
+
+  const worksheet = workbook.addWorksheet('Сводная по преподавателям', {
+    views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }],
+    properties: { defaultRowHeight: 40 },
+  });
+
+  // Формат A4 вертикально
+  const a4Width = 210;
+  const dayColumnWidth = 4;
+  const timeColumnWidth = 15;
+  const availableWidth = a4Width - dayColumnWidth - timeColumnWidth - 2;
+  const teacherWidth = Math.floor(availableWidth / teachers.length);
+
+  const borderStyle = {
+    top: { style: 'thin' as const },
+    left: { style: 'thin' as const },
+    bottom: { style: 'thin' as const },
+    right: { style: 'thin' as const },
+  };
+
+  const dayBottomBorderStyle = {
+    ...borderStyle,
+    bottom: { style: 'medium' as const },
+  };
+
+  // Заголовки
+  const headers = [
+    { name: 'День', color: 'FFF5F5F5', width: dayColumnWidth },
+    { name: 'Время', color: 'FFF5F5F5', width: timeColumnWidth },
+    ...teachers.map((teacher, index) => ({
+      name: `${teacher.lastName} ${teacher.firstName[0]}.${teacher.middleName[0]}.`,
+      color: GROUP_COLORS[index % GROUP_COLORS.length].argb,
+      width: teacherWidth,
+    })),
+  ];
+
+  worksheet.columns = headers.map((h, index) => ({
+    width: h.width / 2,
+    style: {
+      alignment: {
+        wrapText: true,
+        textRotation: index === 0 ? 90 : 0,
+      },
+    },
+  }));
+
+  // Строка заголовка
+  const headerRow = worksheet.addRow(headers.map((h) => h.name));
+  headerRow.height = 35;
+  headerRow.eachCell((cell, colNumber) => {
+    cell.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: headers[colNumber - 1].color },
+    };
+    cell.font = {
+      bold: true,
+      size: 10,
+      color: colNumber > 2 ? { argb: 'FFFFFFFF' } : undefined,
+    };
+    cell.alignment = {
+      vertical: 'middle',
+      horizontal: 'center',
+      wrapText: true,
+      textRotation: colNumber === 1 ? 90 : 0,
+    };
+    cell.border = borderStyle;
+  });
+
+  // Формируем строки: день + время, далее по каждому преподавателю
+  let dayStartRow = 2;
+  DAYS.forEach((day, dayIndex) => {
+    TIME_SLOTS.forEach((timeSlot, slotIndex) => {
+      const rowData: Array<string | ExcelCellValue> = [day.name, timeSlot.time];
+
+      teachers.forEach((teacher) => {
+        // Получаем занятия для выбранной недели или обеих недель
+        const lessonsCh =
+          !weekType || weekType === 'ch'
+            ? (scheduleMap.ch[day.id]?.[timeSlot.slot] || []).filter(
+                (l) => l.__teacherUuid === teacher.uuid
+              )
+            : [];
+        const lessonsZn =
+          !weekType || weekType === 'zn'
+            ? (scheduleMap.zn[day.id]?.[timeSlot.slot] || []).filter(
+                (l) => l.__teacherUuid === teacher.uuid
+              )
+            : [];
+
+        // Функция для получения строк с группами (без "Группы:")
+        const getGroupsString = (lesson: ScheduleItem) => {
+          return lesson.groups
+            .map((g) => groups.find((gr) => gr.uuid === g.uuid)?.name || g.name)
+            .join(', ');
+        };
+
+        if (lessonsCh.length > 0 && lessonsZn.length > 0) {
+          // Обе недели
+          const numLesson = formatLessonText(lessonsCh[0]);
+          const numGroups = getGroupsString(lessonsCh[0]);
+          const denLesson = formatLessonText(lessonsZn[0]);
+          const denGroups = getGroupsString(lessonsZn[0]);
+          rowData.push({
+            richText: [
+              {
+                text: 'ЧС: ',
+                font: { bold: true, size: 8, color: { argb: '99000000' } },
+              },
+              {
+                text: `${numLesson.time}\n`,
+                font: { size: 7, color: { argb: 'FF888888' } },
+              },
+              { text: `${numLesson.name}\n`, font: { size: 8 } },
+              { text: `[${numLesson.type}] `, font: { italic: true, size: 7 } },
+              {
+                text: `${numLesson.teachers}\n`,
+                font: { size: 7 },
+              },
+              {
+                text: `${numGroups}\n`,
+                font: { size: 7, color: { argb: 'FF1677ff' } },
+              },
+              {
+                text: `${numLesson.location}\n`,
+                font: { size: 7 },
+              },
+              {
+                text: 'ЗН: ',
+                font: { bold: true, size: 8, color: { argb: '99000000' } },
+              },
+              {
+                text: `${denLesson.time}\n`,
+                font: { size: 7, color: { argb: 'FF888888' } },
+              },
+              { text: `${denLesson.name}\n`, font: { size: 8 } },
+              { text: `[${denLesson.type}] `, font: { italic: true, size: 7 } },
+              {
+                text: `${denLesson.teachers}\n`,
+                font: { size: 7 },
+              },
+              {
+                text: `${denGroups}\n`,
+                font: { size: 7, color: { argb: 'FF1677ff' } },
+              },
+              {
+                text: `${denLesson.location}`,
+                font: { size: 7 },
+              },
+            ],
+          } as ExcelCellValue);
+        } else if (lessonsCh.length > 0) {
+          // Только числитель
+          const lesson = formatLessonText(lessonsCh[0]);
+          const groupStr = getGroupsString(lessonsCh[0]);
+          rowData.push({
+            richText: [
+              {
+                text: 'ЧС: ',
+                font: { bold: true, size: 8, color: { argb: '99000000' } },
+              },
+              {
+                text: `${lesson.time}\n`,
+                font: { size: 7, color: { argb: 'FF888888' } },
+              },
+              { text: `${lesson.name}\n`, font: { size: 8 } },
+              { text: `[${lesson.type}] `, font: { italic: true, size: 7 } },
+              {
+                text: `${lesson.teachers}\n`,
+                font: { size: 7 },
+              },
+              {
+                text: `${groupStr}\n`,
+                font: { size: 7, color: { argb: 'FF1677ff' } },
+              },
+              {
+                text: `${lesson.location}`,
+                font: { size: 7 },
+              },
+            ],
+          } as ExcelCellValue);
+        } else if (lessonsZn.length > 0) {
+          // Только знаменатель
+          const lesson = formatLessonText(lessonsZn[0]);
+          const groupStr = getGroupsString(lessonsZn[0]);
+          rowData.push({
+            richText: [
+              {
+                text: 'ЗН: ',
+                font: { bold: true, size: 8, color: { argb: '99000000' } },
+              },
+              {
+                text: `${lesson.time}\n`,
+                font: { size: 7, color: { argb: 'FF888888' } },
+              },
+              { text: `${lesson.name}\n`, font: { size: 8 } },
+              { text: `[${lesson.type}] `, font: { italic: true, size: 7 } },
+              {
+                text: `${lesson.teachers}\n`,
+                font: { size: 7 },
+              },
+              {
+                text: `${groupStr}\n`,
+                font: { size: 7, color: { argb: 'FF1677ff' } },
+              },
+              {
+                text: `${lesson.location}`,
+                font: { size: 7 },
+              },
+            ],
+          } as ExcelCellValue);
+        } else {
+          rowData.push({
+            richText: [{ text: '', font: { size: 7 } }],
+          } as ExcelCellValue);
+        }
+      });
+
+      const row = worksheet.addRow(rowData);
+
+      // Стилизовать ячейки
+      row.eachCell((cell, colNumber) => {
+        if (colNumber === 1) {
+          // Столбец дня
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF5F5F5' },
+          };
+          cell.font = { size: 8, bold: true };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: 'center',
+            textRotation: 90,
+          };
+          // Объединить ячейки дня по вертикали
+          if (slotIndex === 0) {
+            dayStartRow = row.number;
+          }
+          if (slotIndex === TIME_SLOTS.length - 1) {
+            worksheet.mergeCells(dayStartRow, 1, row.number, 1);
+          }
+        } else if (colNumber === 2) {
+          // Столбец времени
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF9F9F9' },
+          };
+          cell.font = { size: 7.5, bold: true };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        } else {
+          const groupColor =
+            GROUP_COLORS[(colNumber - 3) % GROUP_COLORS.length];
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: groupColor.light },
+          };
+          cell.alignment = {
+            vertical: 'middle',
+            horizontal: 'center',
+            wrapText: true,
+            shrinkToFit: true,
+          };
+        }
+        cell.border =
+          slotIndex === TIME_SLOTS.length - 1 && dayIndex < DAYS.length - 1
+            ? dayBottomBorderStyle
+            : borderStyle;
+      });
+
+      // Динамический расчет высоты строки для полного вмещения текста
+      const maxLines = rowData.slice(2).reduce((max, cell) => {
+        if (typeof cell === 'object' && 'richText' in cell) {
+          const lines = cell.richText.reduce(
+            (sum, part) => sum + (part.text.match(/\n/g)?.length ?? 0) + 1,
+            0
+          );
+          return Math.max(max, lines);
+        }
+        return max;
+      }, 1);
+
+      const maxTextLength = rowData.slice(2).reduce((max, cell) => {
+        if (typeof cell === 'object' && 'richText' in cell) {
+          const totalLength = cell.richText.reduce(
+            (sum, part) => sum + part.text.length,
+            0
+          );
+          return Math.max(max, totalLength);
+        }
+        return max;
+      }, 0);
+
+      // Меньше базовая высота и шаг
+      let baseHeight = Math.max(10, maxLines * 11);
+      if (maxTextLength > 100) {
+        baseHeight += 10;
+      } else if (maxTextLength > 70) {
+        baseHeight += 5;
+      }
+      row.height = baseHeight;
+    });
+  });
+
+  worksheet.pageSetup.orientation = 'portrait';
+  worksheet.pageSetup.fitToPage = true;
+  worksheet.pageSetup.fitToWidth = 1;
+  worksheet.pageSetup.fitToHeight = 1;
+  worksheet.pageSetup.paperSize = 9;
+  worksheet.pageSetup.scale = 100;
+  worksheet.pageSetup.margins = {
+    left: 0.1,
+    right: 0.1,
+    top: 0.1,
+    bottom: 0.1,
+    header: 0,
+    footer: 0,
+  };
+
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  worksheet.pageSetup.printArea = `A1:${String.fromCharCode(
+    65 + headers.length - 1
+  )}${worksheet.rowCount}`;
+
+  return workbook;
+}
+
 export async function downloadExcel(
   workbook: ExcelJS.Workbook,
   filename: string
@@ -886,7 +1244,7 @@ export async function generateExcelWorkbookForWeek(
 
       let baseHeight = hasAnyLesson ? 32 : 12;
       if (maxTextLength > 100) {
-        baseHeight += 20;
+        baseHeight += 15;
       } else if (maxTextLength > 70) {
         baseHeight += 10;
       }

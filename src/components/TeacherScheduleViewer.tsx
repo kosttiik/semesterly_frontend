@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, FC, useMemo, useCallback } from 'react';
 import {
   Select,
   Card,
@@ -32,6 +32,7 @@ import {
   generateTeacherExcelWorkbook,
   downloadExcel,
   generateMultiTeacherExcelWorkbook,
+  exportTeacherPivotTable,
 } from '../utils/excelExport';
 import dayjs from 'dayjs';
 import '../App.css';
@@ -85,7 +86,9 @@ const TEACHER_COLORS = [
   '#fa8c16', // оранжевый
 ] as const;
 
-const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
+type TeacherExportMode = 'default' | 'list' | 'pivot';
+
+const TeacherScheduleViewer: FC<TeacherScheduleViewerProps> = ({
   displayMode,
   setDisplayMode,
 }) => {
@@ -97,6 +100,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
   const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [selectedWeekType, setSelectedWeekType] = useState<'ch' | 'zn'>('ch');
+  const [exportMode, setExportMode] = useState<TeacherExportMode>('pivot');
 
   // Для одного или нескольких преподавателей: группируем по ключу занятия, фильтруем по выбранным преподавателям если их несколько
   const organizedSchedule = useMemo(() => {
@@ -874,7 +878,20 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
         .join('_');
       const timestamp = dayjs().format('DD-MM-YYYY');
 
-      if (selectedTeachers.length === 1) {
+      if (exportMode === 'pivot') {
+        // Режим сводной таблицы
+        wb = await exportTeacherPivotTable({
+          teachers: teachers.filter((t) => selectedTeachers.includes(t.uuid)),
+          scheduleMap: teacherScheduleMap,
+          groups,
+          weekType: displayMode === 'separate' ? selectedWeekType : undefined,
+        });
+        filename = `Расписание_Сводная_${teacherNames}_${
+          displayMode === 'separate'
+            ? (selectedWeekType === 'ch' ? 'Числитель' : 'Знаменатель') + '_'
+            : ''
+        }${timestamp}.xlsx`;
+      } else if (selectedTeachers.length === 1) {
         const teacherObj = teachers.find((t) => t.uuid === selectedTeachers[0]);
         const teacherName = teacherObj
           ? `${teacherObj.lastName} ${teacherObj.firstName} ${teacherObj.middleName}`.replace(
@@ -912,6 +929,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
             selectedTeachers,
             teachers,
             {
+              ...teacherScheduleMap,
               ch: selectedWeekType === 'ch' ? teacherScheduleMap.ch : {},
               zn: selectedWeekType === 'zn' ? teacherScheduleMap.zn : {},
             },
@@ -943,6 +961,7 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
     groups,
     displayMode,
     selectedWeekType,
+    exportMode,
   ]);
 
   // Обновить преподавателей и сбросить их кэш
@@ -1027,6 +1046,16 @@ const TeacherScheduleViewer: React.FC<TeacherScheduleViewerProps> = ({
               >
                 Экспорт в Excel
               </Button>
+              <Select
+                value={exportMode}
+                onChange={setExportMode}
+                style={{ width: 160 }}
+                options={[
+                  // { label: 'Обычный экспорт', value: 'default' }, // УБРАНО
+                  { label: 'Список', value: 'list' },
+                  { label: 'Сводная таблица', value: 'pivot' },
+                ]}
+              />
             </Space>
             <Button icon={<ReloadOutlined />} onClick={handleRefreshTeachers}>
               Обновить
